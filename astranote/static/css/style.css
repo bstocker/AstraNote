@@ -157,6 +157,21 @@ td.note-cell input { font-weight: 700; text-align: center; border: none; backgro
 .pill-status { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 11px; }
 
 .help { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+/* Encart "étudiants sans groupe" (mode groupe) */
+.unassigned-box {
+  margin-top: 14px; padding: 12px 16px;
+  background: #fff7ed; border: 1px solid #fdba74; border-radius: 8px;
+}
+.unassigned-box strong { color: #9a3412; }
+.unassigned-box ul { list-style: none; padding: 0; margin: 8px 0 0;
+  display: flex; flex-wrap: wrap; gap: 8px; }
+.unassigned-box li {
+  background: #fff; border: 1px solid var(--border); border-radius: 6px;
+  padding: 5px 10px; display: flex; align-items: center; gap: 6px;
+}
+.unassigned-box .assign-inline { display: inline; }
+.unassigned-box .assign-inline select { padding: 2px 6px; font-size: 12px; width: auto; }
 .flex-between { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 details.tool { margin-top: 10px; }
 details.tool summary { cursor: pointer; font-weight: 600; color: var(--accent); font-size: 13px; }

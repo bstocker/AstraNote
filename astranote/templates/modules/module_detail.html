@@ -212,10 +212,10 @@
         </li>
         {% else %}<li class="muted">Vide</li>{% endfor %}
       </ul>
-      {% if unassigned %}
+      {% if unassigned_active %}
       <form method="post" action="{{ url_for('modules.add_group_member', group_id=grp.id) }}" class="inline-form">
         <div><select name="student_id">
-          {% for st in unassigned %}<option value="{{ st.id }}">{{ st.full_name }}</option>{% endfor %}
+          {% for st in unassigned_active %}<option value="{{ st.id }}">{{ st.full_name }}</option>{% endfor %}
         </select></div>
         <div><button class="btn small secondary" type="submit">Affecter</button></div>
       </form>
@@ -223,8 +223,33 @@
     </div>
     {% endfor %}
   </div>
+
+  <!-- Étudiants sans groupe -->
   {% if unassigned %}
-  <p class="help">Non affectés : {{ unassigned|map(attribute='full_name')|join(', ') }}</p>
+  <div class="unassigned-box">
+    <strong>⚠ {{ unassigned|length }} étudiant(s) sans groupe</strong>
+    <ul>
+      {% for st in unassigned %}
+      <li>
+        {{ st.full_name }}
+        {% if not st.active %}<span class="badge neutral">neutralisé</span>{% endif %}
+        {% if module.groups and st.active %}
+        <form method="post" action="{{ url_for('modules.add_group_member', group_id=0) }}"
+              class="assign-inline" data-base="{{ url_for('modules.add_group_member', group_id=0) }}">
+          <input type="hidden" name="student_id" value="{{ st.id }}">
+          <select onchange="if(this.value){this.form.action=this.form.dataset.base.replace('/groups/0/','/groups/'+this.value+'/');this.form.submit();}">
+            <option value="">→ affecter à…</option>
+            {% for grp in module.groups %}<option value="{{ grp.id }}">{{ grp.name }}</option>{% endfor %}
+          </select>
+        </form>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% if not module.groups %}<p class="help" style="margin:0;">Créez d'abord un groupe pour pouvoir les affecter.</p>{% endif %}
+  </div>
+  {% else %}
+  <p class="help">✓ Tous les étudiants sont affectés à un groupe.</p>
   {% endif %}
 </div>
 {% endif %}
