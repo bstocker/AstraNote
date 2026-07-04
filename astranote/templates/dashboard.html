@@ -14,7 +14,7 @@
 {% if not classes %}
   <div class="panel">
     <p>Aucune classe pour l'instant.</p>
-    {% if current_user.is_admin and (not schools or not years) %}
+    {% if not schools or not years %}
       <p class="muted">Commencez par créer une <a href="{{ url_for('main.schools') }}">école et une année académique</a>.</p>
     {% else %}
       <a class="btn" href="{{ url_for('main.create_class') }}">Créer une classe</a>

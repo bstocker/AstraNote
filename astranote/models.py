@@ -23,16 +23,23 @@ class School(db.Model):
     __tablename__ = "school"
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
+    # Propriétaire : l'enseignant qui l'a créée. NULL = école commune (admin),
+    # visible par tous les enseignants.
+    teacher_id = db.Column(db.Integer, db.ForeignKey("teacher.id"), nullable=True)
 
     classes = db.relationship("Class", backref="school", cascade="all, delete-orphan")
+    owner = db.relationship("Teacher", backref="owned_schools")
 
 
 class AcademicYear(db.Model):
     __tablename__ = "academic_year"
     id = db.Column(db.Integer, primary_key=True)
     label = db.Column(db.String(20), nullable=False)  # ex. "2025-2026"
+    # Propriétaire : cf. School.teacher_id. NULL = année commune (admin).
+    teacher_id = db.Column(db.Integer, db.ForeignKey("teacher.id"), nullable=True)
 
     classes = db.relationship("Class", backref="academic_year", cascade="all, delete-orphan")
+    owner = db.relationship("Teacher", backref="owned_years")
 
 
 class Teacher(UserMixin, db.Model):

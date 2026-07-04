@@ -2,7 +2,7 @@
 
 **Suivi et notation des étudiants**
 
-Version : 2.0 · Date : 3 juillet 2026 · Auteur : Boris Stocker
+Version : 2.1 · Date : 4 juillet 2026 · Auteur : Boris Stocker
 
 ---
 
@@ -101,8 +101,10 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
 
 | Rôle | Droits |
 |---|---|
-| **Administrateur** | Gère les écoles, années et comptes enseignants ; accès global. |
-| **Enseignant** | Crée/gère ses classes, modules, dates, colonnes ; saisit étoiles et notes ; consulte la note d'étoiles calculée. Ne voit que **ses** classes. |
+| **Administrateur** | Gère les comptes enseignants et l'ensemble des écoles/années (dont les **écoles/années communes**) ; accès global à toutes les données. |
+| **Enseignant** | Crée/gère **ses propres écoles et années académiques**, ses classes, modules, dates, colonnes ; saisit étoiles et notes ; consulte la note d'étoiles calculée. Ne voit que **ses** écoles, années et classes, **plus les écoles/années communes**. |
+
+**Écoles / années propres vs communes.** Une école ou une année créée par un enseignant lui **appartient** : elle n'est visible et modifiable que par lui (et par l'administrateur). Une école ou une année créée par l'**administrateur** est **commune** : visible par tous les enseignants (qui peuvent la réutiliser pour leurs classes) mais modifiable/supprimable uniquement par l'administrateur. Cela évite qu'un même établissement soit ressaisi par chaque enseignant tout en garantissant que chacun gère son propre périmètre.
 
 **Pas d'accès étudiant.** L'application est un outil interne aux enseignants.
 
@@ -117,7 +119,8 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
 
 ### 5.2 Structure : écoles, années, classes
 - CRUD **écoles**, **années académiques**, **classes**.
-- Association d'une classe à une école + une année.
+- **Chaque enseignant peut créer ses propres écoles et années** ; il ne voit que les siennes plus les **écoles/années communes** créées par l'administrateur.
+- Association d'une classe à une école + une année (choisies parmi celles visibles par l'enseignant).
 - Duplication d'une classe d'une année sur l'autre (report de la structure sans les étoiles).
 
 ### 5.3 Modules, dates et colonnes
@@ -179,8 +182,8 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
 ## 6. Modèle de données (SQLite)
 
 ```
-School(id, name)
-AcademicYear(id, label)                       # ex. "2025-2026"
+School(id, name, teacher_id)                  # teacher_id = propriétaire ; NULL = école commune (admin)
+AcademicYear(id, label, teacher_id)           # ex. "2025-2026" ; NULL = année commune (admin)
 Teacher(id, name, email, password_hash, role) # role = admin | teacher
 Class(id, name, school_id, academic_year_id, teacher_id)
 Module(id, name, discord_channel, class_id, work_mode)  # work_mode = individual | group
@@ -235,6 +238,7 @@ Contraintes PythonAnywhere prises en compte : une seule base SQLite, pas de serv
 ## 9. Décisions arrêtées
 
 - **Hébergement** : PythonAnywhere, Flask + SQLite (solution simple).
+- **Écoles / années par enseignant** *(v2.1)* : chaque enseignant crée et gère ses propres écoles et années (il ne voit que les siennes). Les écoles/années créées par l'administrateur sont **communes** (visibles par tous, modifiables par l'admin seul).
 - **Colonnes d'étoiles** : ajoutables à tout moment ; structure date → colonnes.
 - **Plusieurs dates** par module/classe.
 - **Note finale manuelle** via colonnes Note CC / Note Examen (pondération faite par l'enseignant) ; plusieurs notes possibles par classe.

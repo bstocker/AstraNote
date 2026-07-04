@@ -12,7 +12,9 @@ finales restent saisies à la main par l'enseignant.
 ## Fonctionnalités (MVP v1)
 
 - Authentification enseignants (Flask-Login, hash Werkzeug) ; comptes créés par l'admin.
-- Structure **École › Année académique › Classe › Module**.
+- Structure **École › Année académique › Classe › Module**. Chaque enseignant gère
+  ses propres écoles/années (visibles de lui seul) ; celles créées par l'admin sont
+  communes (visibles par tous).
 - Modules **individuels** ou **en groupe**.
 - Grille de saisie : **dates**, **colonnes d'étoiles** (ajoutables à tout moment),
   **colonnes URL**, **colonnes de note manuelles** (« Note CC », « Note Examen »…).

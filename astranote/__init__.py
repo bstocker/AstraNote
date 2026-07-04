@@ -48,9 +48,36 @@ def create_app(config_object=Config):
 
     with app.app_context():
         db.create_all()
+        _run_migrations(app)
         _ensure_admin(app)
 
     return app
+
+
+def _run_migrations(app):
+    """Migrations légères et idempotentes pour les bases SQLite existantes.
+
+    `db.create_all()` crée les tables manquantes mais n'altère jamais une table
+    existante. On ajoute donc à la main les colonnes introduites après coup.
+    """
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(db.engine)
+
+    def add_column_if_missing(table, column, ddl_type):
+        if table not in inspector.get_table_names():
+            return
+        existing = {c["name"] for c in inspector.get_columns(table)}
+        if column not in existing:
+            db.session.execute(
+                text(f'ALTER TABLE "{table}" ADD COLUMN {column} {ddl_type}')
+            )
+            db.session.commit()
+            app.logger.warning("Migration : colonne %s.%s ajoutée.", table, column)
+
+    # Évolution : écoles / années rattachables à un enseignant propriétaire.
+    add_column_if_missing("school", "teacher_id", "INTEGER")
+    add_column_if_missing("academic_year", "teacher_id", "INTEGER")
 
 
 def _ensure_admin(app):

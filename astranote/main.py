@@ -14,7 +14,6 @@ from sqlalchemy import or_
 from .models import (
     db, School, AcademicYear, Class, Module, Student, Enrollment, Teacher,
 )
-from .auth import admin_required
 
 main_bp = Blueprint("main", __name__)
 
@@ -37,6 +36,32 @@ def get_class_or_403(class_id):
     return klass
 
 
+def visible_schools_query():
+    """Écoles visibles : les siennes + les communes (admin) ; tout si admin."""
+    q = School.query
+    if not current_user.is_admin:
+        q = q.filter(or_(School.teacher_id == current_user.id,
+                         School.teacher_id.is_(None)))
+    return q.order_by(School.name)
+
+
+def visible_years_query():
+    q = AcademicYear.query
+    if not current_user.is_admin:
+        q = q.filter(or_(AcademicYear.teacher_id == current_user.id,
+                         AcademicYear.teacher_id.is_(None)))
+    return q.order_by(AcademicYear.label.desc())
+
+
+def can_manage_owned(obj):
+    """Vrai si l'utilisateur peut modifier/supprimer une école/année.
+
+    L'admin gère tout ; un enseignant uniquement ce qu'il possède (pas les
+    entités communes, teacher_id NULL).
+    """
+    return current_user.is_admin or obj.teacher_id == current_user.id
+
+
 def strip_accents(text):
     text = unicodedata.normalize("NFKD", text or "")
     return "".join(c for c in text if not unicodedata.combining(c)).lower()
@@ -49,36 +74,46 @@ def strip_accents(text):
 @login_required
 def dashboard():
     classes = visible_classes_query().all()
-    schools = School.query.order_by(School.name).all()
-    years = AcademicYear.query.order_by(AcademicYear.label.desc()).all()
+    schools = visible_schools_query().all()
+    years = visible_years_query().all()
     return render_template(
         "dashboard.html", classes=classes, schools=schools, years=years,
     )
 
 
 # --------------------------------------------------------------------------- #
-# Écoles & années (gérées par l'administrateur — fiche §4)
+# Écoles & années
+# Chaque enseignant gère les siennes ; l'admin gère tout. Les entités créées
+# par l'admin (teacher_id NULL) sont communes et visibles par tous (fiche §4).
 # --------------------------------------------------------------------------- #
+def _owner_id_for_new():
+    """Propriétaire d'une entité nouvellement créée : l'enseignant, ou NULL
+    (commune) si c'est l'admin."""
+    return None if current_user.is_admin else current_user.id
+
+
 @main_bp.route("/schools", methods=["GET", "POST"])
-@admin_required
+@login_required
 def schools():
     if request.method == "POST":
         name = request.form.get("name", "").strip()
         if name:
-            db.session.add(School(name=name))
+            db.session.add(School(name=name, teacher_id=_owner_id_for_new()))
             db.session.commit()
             flash("École ajoutée.", "success")
         return redirect(url_for("main.schools"))
 
-    schools = School.query.order_by(School.name).all()
-    years = AcademicYear.query.order_by(AcademicYear.label.desc()).all()
+    schools = visible_schools_query().all()
+    years = visible_years_query().all()
     return render_template("structure/schools.html", schools=schools, years=years)
 
 
 @main_bp.route("/schools/<int:school_id>/delete", methods=["POST"])
-@admin_required
+@login_required
 def delete_school(school_id):
     school = db.session.get(School, school_id) or abort(404)
+    if not can_manage_owned(school):
+        abort(403)
     db.session.delete(school)
     db.session.commit()
     flash("École supprimée.", "success")
@@ -86,20 +121,22 @@ def delete_school(school_id):
 
 
 @main_bp.route("/years", methods=["POST"])
-@admin_required
+@login_required
 def create_year():
     label = request.form.get("label", "").strip()
     if label:
-        db.session.add(AcademicYear(label=label))
+        db.session.add(AcademicYear(label=label, teacher_id=_owner_id_for_new()))
         db.session.commit()
         flash("Année académique ajoutée.", "success")
     return redirect(url_for("main.schools"))
 
 
 @main_bp.route("/years/<int:year_id>/delete", methods=["POST"])
-@admin_required
+@login_required
 def delete_year(year_id):
     year = db.session.get(AcademicYear, year_id) or abort(404)
+    if not can_manage_owned(year):
+        abort(403)
     db.session.delete(year)
     db.session.commit()
     flash("Année supprimée.", "success")
@@ -112,8 +149,8 @@ def delete_year(year_id):
 @main_bp.route("/classes/new", methods=["GET", "POST"])
 @login_required
 def create_class():
-    schools = School.query.order_by(School.name).all()
-    years = AcademicYear.query.order_by(AcademicYear.label.desc()).all()
+    schools = visible_schools_query().all()
+    years = visible_years_query().all()
     teachers = Teacher.query.order_by(Teacher.name).all()
 
     if request.method == "POST":
@@ -125,7 +162,13 @@ def create_class():
             request.form.get("teacher_id", type=int)
             if current_user.is_admin else current_user.id
         )
-        if not (name and school_id and year_id and teacher_id):
+        # L'école / l'année choisies doivent être dans le périmètre visible
+        # (empêche de rattacher une classe à une entité d'un autre enseignant).
+        visible_school_ids = {s.id for s in schools}
+        visible_year_ids = {y.id for y in years}
+        if school_id not in visible_school_ids or year_id not in visible_year_ids:
+            flash("École ou année invalide.", "error")
+        elif not (name and school_id and year_id and teacher_id):
             flash("Tous les champs sont requis.", "error")
         else:
             klass = Class(

@@ -13,8 +13,8 @@
   <a href="{{ url_for('main.dashboard') }}"><img class="logo" src="{{ url_for('static', filename='img/logo.png') }}" alt="AstraNote"></a>
   <nav>
     <a href="{{ url_for('main.dashboard') }}">Tableau de bord</a>
+    <a href="{{ url_for('main.schools') }}">Écoles &amp; années</a>
     {% if current_user.is_admin %}
-      <a href="{{ url_for('main.schools') }}">Écoles &amp; années</a>
       <a href="{{ url_for('auth.teachers') }}">Enseignants</a>
     {% endif %}
     <a href="{{ url_for('main.create_class') }}">+ Classe</a>
