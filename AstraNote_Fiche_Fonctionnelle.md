@@ -169,7 +169,10 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
 - Export d'un module en `.xlsx` / `.csv` (étoiles, note d'étoiles, notes manuelles).
 
 ### 5.9 Tableau de bord
-- Vue par enseignant : classes, modules, avancement de la saisie.
+- **Sélecteur d'année académique** en tête : l'enseignant choisit l'année, et le tableau de bord affiche alors les **écoles**, et **sous chaque école ses classes** de l'année sélectionnée.
+- Par défaut, l'année la plus récente est présélectionnée.
+- Chaque classe est cliquable et donne accès à ses modules.
+- Périmètre respectant les droits (l'enseignant ne voit que ses classes et ses écoles/années plus les communes).
 
 ### 5.10 Recherche d'étudiant
 - **Recherche globale par nom** dans toute la base, depuis n'importe quelle page.

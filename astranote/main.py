@@ -73,11 +73,33 @@ def strip_accents(text):
 @main_bp.route("/")
 @login_required
 def dashboard():
-    classes = visible_classes_query().all()
-    schools = visible_schools_query().all()
     years = visible_years_query().all()
+
+    # Année sélectionnée : celle de l'URL si valide, sinon la plus récente.
+    selected_year_id = request.args.get("year", type=int)
+    valid_year_ids = {y.id for y in years}
+    if selected_year_id not in valid_year_ids:
+        selected_year_id = years[0].id if years else None
+
+    # Classes visibles de l'année choisie, regroupées par école.
+    groups = []
+    if selected_year_id:
+        classes = (
+            visible_classes_query()
+            .filter(Class.academic_year_id == selected_year_id)
+            .all()
+        )
+        by_school = {}
+        for c in classes:
+            by_school.setdefault(c.school, []).append(c)
+        groups = [
+            (school, sorted(cls, key=lambda c: c.name.lower()))
+            for school, cls in sorted(by_school.items(), key=lambda kv: kv[0].name.lower())
+        ]
+
     return render_template(
-        "dashboard.html", classes=classes, schools=schools, years=years,
+        "dashboard.html", years=years, groups=groups,
+        selected_year_id=selected_year_id,
     )
 
 

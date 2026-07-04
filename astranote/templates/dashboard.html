@@ -11,25 +11,47 @@
   <a class="btn" href="{{ url_for('main.create_class') }}">+ Nouvelle classe</a>
 </div>
 
-{% if not classes %}
+{% if not years %}
   <div class="panel">
-    <p>Aucune classe pour l'instant.</p>
-    {% if not schools or not years %}
-      <p class="muted">Commencez par créer une <a href="{{ url_for('main.schools') }}">école et une année académique</a>.</p>
-    {% else %}
-      <a class="btn" href="{{ url_for('main.create_class') }}">Créer une classe</a>
-    {% endif %}
+    <p>Aucune année académique pour l'instant.</p>
+    <p class="muted">Commencez par créer une <a href="{{ url_for('main.schools') }}">école et une année académique</a>.</p>
   </div>
 {% else %}
-  <div class="grid-cards">
-    {% for c in classes %}
-    <a class="card" href="{{ url_for('main.view_class', class_id=c.id) }}">
-      <h3>{{ c.name }}</h3>
-      <div class="meta">{{ c.school.name }} · {{ c.academic_year.label }}</div>
-      <div class="meta">{{ c.modules|length }} module(s) · {{ c.enrollments|length }} étudiant(s)</div>
-      {% if current_user.is_admin %}<div class="meta">Enseignant : {{ c.teacher.name }}</div>{% endif %}
-    </a>
+  <form method="get" class="panel" style="display:flex; align-items:flex-end; gap:12px; margin-bottom:16px;">
+    <div style="flex:0 0 260px;">
+      <label>Année académique</label>
+      <select name="year" onchange="this.form.submit()">
+        {% for y in years %}
+          <option value="{{ y.id }}" {{ 'selected' if y.id == selected_year_id else '' }}>{{ y.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <noscript><button class="btn" type="submit">Afficher</button></noscript>
+  </form>
+
+  {% if not groups %}
+    <div class="panel muted">
+      Aucune classe pour cette année. <a href="{{ url_for('main.create_class') }}">Créer une classe</a>.
+    </div>
+  {% else %}
+    {% for school, classes in groups %}
+    <div class="panel">
+      <h2 style="margin-top:0;">
+        {{ school.name }}
+        {% if school.teacher_id is none %}<span class="badge" title="École commune">commune</span>{% endif %}
+        <span class="muted" style="font-weight:400; font-size:13px;">· {{ classes|length }} classe(s)</span>
+      </h2>
+      <div class="grid-cards">
+        {% for c in classes %}
+        <a class="card" href="{{ url_for('main.view_class', class_id=c.id) }}">
+          <h3>{{ c.name }}</h3>
+          <div class="meta">{{ c.modules|length }} module(s) · {{ c.enrollments|length }} étudiant(s)</div>
+          {% if current_user.is_admin %}<div class="meta">Enseignant : {{ c.teacher.name }}</div>{% endif %}
+        </a>
+        {% endfor %}
+      </div>
+    </div>
     {% endfor %}
-  </div>
+  {% endif %}
 {% endif %}
 {% endblock %}
