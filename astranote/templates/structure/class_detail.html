@@ -129,4 +129,26 @@
     </details>
   </div>
 </div>
+
+<!-- Facturation -->
+<div class="panel">
+  <h2>Facturation</h2>
+  <form method="post" action="{{ url_for('main.update_class_billing', class_id=klass.id) }}" class="inline-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div style="flex:0 0 220px;">
+      <label>Taux horaire (€/h)</label>
+      <input type="number" step="0.01" min="0" name="hourly_rate"
+             value="{{ klass.hourly_rate if klass.hourly_rate is not none else '' }}" placeholder="ex. 55">
+    </div>
+    <div style="flex:0 0 auto;"><button class="btn small" type="submit">Enregistrer</button></div>
+  </form>
+  <div class="muted" style="margin-top:12px;">
+    <strong>École — {{ klass.school.name }}</strong><br>
+    Contacts de facturation : {{ klass.school.billing_emails or '—' }}
+    {% if klass.school.observation %}<br>Observation : {{ klass.school.observation }}{% endif %}
+    {% if current_user.is_admin or klass.school.teacher_id == current_user.id %}
+      <br><a href="{{ url_for('main.schools') }}">Modifier les infos de facturation de l'école</a>
+    {% endif %}
+  </div>
+</div>
 {% endblock %}

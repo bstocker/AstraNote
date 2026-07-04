@@ -26,6 +26,9 @@ class School(db.Model):
     # Propriétaire : l'enseignant qui l'a créée. NULL = école commune (admin),
     # visible par tous les enseignants.
     teacher_id = db.Column(db.Integer, db.ForeignKey("teacher.id"), nullable=True)
+    # Facturation : destinataires des factures (emails) et observation libre.
+    billing_emails = db.Column(db.String(500))
+    observation = db.Column(db.Text)
 
     classes = db.relationship("Class", backref="school", cascade="all, delete-orphan")
     owner = db.relationship("Teacher", backref="owned_schools")
@@ -64,6 +67,7 @@ class Class(db.Model):
     school_id = db.Column(db.Integer, db.ForeignKey("school.id"), nullable=False)
     academic_year_id = db.Column(db.Integer, db.ForeignKey("academic_year.id"), nullable=False)
     teacher_id = db.Column(db.Integer, db.ForeignKey("teacher.id"), nullable=False)
+    hourly_rate = db.Column(db.Float)  # taux horaire €/h pour la facturation
 
     modules = db.relationship("Module", backref="klass", cascade="all, delete-orphan")
     enrollments = db.relationship("Enrollment", backref="klass", cascade="all, delete-orphan")

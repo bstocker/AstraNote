@@ -218,6 +218,20 @@ def rename_school(school_id):
     return redirect(url_for("main.schools"))
 
 
+@main_bp.route("/schools/<int:school_id>/details", methods=["POST"])
+@login_required
+def update_school_details(school_id):
+    """Contacts de facturation (emails) et observation libre d'une école."""
+    school = db.session.get(School, school_id) or abort(404)
+    if not can_manage_owned(school):
+        abort(403)
+    school.billing_emails = request.form.get("billing_emails", "").strip() or None
+    school.observation = request.form.get("observation", "").strip() or None
+    db.session.commit()
+    flash("Informations de facturation de l'école enregistrées.", "success")
+    return redirect(url_for("main.schools"))
+
+
 @main_bp.route("/years", methods=["POST"])
 @login_required
 def create_year():
@@ -305,6 +319,28 @@ def create_class():
 def view_class(class_id):
     klass = get_class_or_403(class_id)
     return render_template("structure/class_detail.html", klass=klass)
+
+
+@main_bp.route("/classes/<int:class_id>/billing", methods=["POST"])
+@login_required
+def update_class_billing(class_id):
+    """Taux horaire €/h de la classe (pour la facturation)."""
+    klass = get_class_or_403(class_id)
+    raw = request.form.get("hourly_rate", "").strip().replace(",", ".")
+    if raw == "":
+        klass.hourly_rate = None
+    else:
+        try:
+            rate = float(raw)
+            if rate < 0:
+                raise ValueError
+        except ValueError:
+            flash("Taux horaire invalide.", "error")
+            return redirect(url_for("main.view_class", class_id=class_id))
+        klass.hourly_rate = rate
+    db.session.commit()
+    flash("Taux horaire enregistré.", "success")
+    return redirect(url_for("main.view_class", class_id=class_id))
 
 
 @main_bp.route("/classes/<int:class_id>/delete", methods=["POST"])

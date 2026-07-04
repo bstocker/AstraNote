@@ -321,6 +321,46 @@ def test_teacher_cannot_rename_common_school(app, admin):
     assert c.post(f"/schools/{sid}/rename", data={"name": "Pirate"}).status_code == 403
 
 
+def test_school_billing_and_class_rate(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    with app.app_context():
+        sid = School.query.first().id
+    # Infos de facturation de l'école
+    admin.post(f"/schools/{sid}/details", data={
+        "billing_emails": "compta@epsi.fr, direction@epsi.fr",
+        "observation": "Payer sous 30 jours.",
+    })
+    # Taux horaire de la classe (virgule décimale acceptée)
+    admin.post(f"/classes/{cid}/billing", data={"hourly_rate": "55,5"})
+    with app.app_context():
+        s = db.session.get(School, sid)
+        assert s.billing_emails == "compta@epsi.fr, direction@epsi.fr"
+        assert s.observation == "Payer sous 30 jours."
+        assert db.session.get(Class, cid).hourly_rate == 55.5
+    # Affichage sur la fiche de classe
+    html = admin.get(f"/classes/{cid}").get_data(as_text=True)
+    assert "compta@epsi.fr" in html and "55" in html
+
+
+def test_invalid_hourly_rate_rejected(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    admin.post(f"/classes/{cid}/billing", data={"hourly_rate": "55"})
+    r = admin.post(f"/classes/{cid}/billing", data={"hourly_rate": "abc"}, follow_redirects=True)
+    assert "invalide" in r.get_data(as_text=True)
+    with app.app_context():
+        assert db.session.get(Class, cid).hourly_rate == 55  # inchangé
+
+
+def test_teacher_cannot_edit_common_school_billing(app, admin):
+    admin.post("/schools", data={"name": "Commune"})
+    with app.app_context():
+        sid = School.query.first().id
+    make_teacher(app, "Prof", "p@x.fr")
+    c = app.test_client()
+    login(c, "p@x.fr")
+    assert c.post(f"/schools/{sid}/details", data={"billing_emails": "x@x.fr"}).status_code == 403
+
+
 def test_secure_cookie_flags(app):
     assert app.config["SESSION_COOKIE_HTTPONLY"] is True
     assert app.config["SESSION_COOKIE_SAMESITE"] == "Lax"

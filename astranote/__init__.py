@@ -90,6 +90,10 @@ def _run_migrations(app):
     add_column_if_missing("module", "notes_sent_date", "DATE")
     add_column_if_missing("module", "notes_sent_method", "VARCHAR(20)")
     add_column_if_missing("module", "notes_sent_detail", "VARCHAR(200)")
+    # Évolution : facturation (école : contacts + observation ; classe : taux horaire).
+    add_column_if_missing("school", "billing_emails", "VARCHAR(500)")
+    add_column_if_missing("school", "observation", "TEXT")
+    add_column_if_missing("class", "hourly_rate", "FLOAT")
 
 
 def _ensure_admin(app):

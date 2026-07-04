@@ -36,6 +36,26 @@
             {% endif %}
           </td>
         </tr>
+        {% if current_user.is_admin or s.teacher_id == current_user.id %}
+        <tr>
+          <td colspan="3" style="padding-top:0; border-bottom:1px solid var(--border);">
+            <details class="tool" style="margin:0;">
+              <summary>💶 Facturation &amp; observation{% if s.billing_emails or s.observation %} ✓{% endif %}</summary>
+              <div>
+                <form method="post" action="{{ url_for('main.update_school_details', school_id=s.id) }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <label>Contacts de facturation (emails)</label>
+                  <input type="text" name="billing_emails" value="{{ s.billing_emails or '' }}"
+                         placeholder="compta@ecole.fr, direction@ecole.fr">
+                  <label>Observation</label>
+                  <textarea name="observation" rows="3" placeholder="Remarques libres sur cette école…">{{ s.observation or '' }}</textarea>
+                  <div style="margin-top:8px;"><button class="btn small" type="submit">Enregistrer</button></div>
+                </form>
+              </div>
+            </details>
+          </td>
+        </tr>
+        {% endif %}
         {% else %}<tr><td class="muted">Aucune école.</td></tr>{% endfor %}
       </tbody>
     </table>

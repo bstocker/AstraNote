@@ -124,6 +124,7 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
 - CRUD **écoles**, **années académiques**, **classes**.
 - **Chaque enseignant peut créer, renommer et supprimer ses propres écoles et années** ; il ne voit que les siennes plus les **écoles/années communes** créées par l'administrateur (renommables/supprimables par l'admin seul).
 - Association d'une classe à une école + une année (choisies parmi celles visibles par l'enseignant).
+- **Facturation** : pour chaque **école**, contacts de facturation (emails des destinataires des factures) et **observation libre** ; pour chaque **classe**, **taux horaire €/h**. Ces informations sont consultables depuis la fiche de la classe.
 - Duplication d'une classe d'une année sur l'autre (report de la structure sans les étoiles).
 
 ### 5.3 Modules, dates et colonnes
@@ -199,10 +200,10 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
 ## 6. Modèle de données (SQLite)
 
 ```
-School(id, name, teacher_id)                  # teacher_id = propriétaire ; NULL = école commune (admin)
+School(id, name, teacher_id, billing_emails, observation)  # billing_emails/observation = facturation
 AcademicYear(id, label, teacher_id)           # ex. "2025-2026" ; NULL = année commune (admin)
 Teacher(id, name, email, password_hash, role) # role = admin | teacher
-Class(id, name, school_id, academic_year_id, teacher_id)
+Class(id, name, school_id, academic_year_id, teacher_id, hourly_rate)  # hourly_rate = taux horaire €/h
 Module(id, name, discord_url, class_id, work_mode,          # work_mode = individual | group
        notes_sent, notes_sent_date, notes_sent_method, notes_sent_detail)  # transmission des notes à l'établissement
 GradeDate(id, module_id, label, date, position)      # une date/séance
