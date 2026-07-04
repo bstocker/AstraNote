@@ -81,6 +81,12 @@ h2 { font-size: 17px; margin: 24px 0 10px; }
 .progress { height: 7px; background: #e2e8f0; border-radius: 999px; margin: 10px 0 4px; overflow: hidden; }
 .progress-bar { height: 100%; background: var(--accent); border-radius: 999px; }
 
+/* Liste des modules dans une carte de classe (tableau de bord) */
+.module-list { list-style: none; padding: 0; margin: 10px 0 0; border-top: 1px solid var(--border); }
+.module-list li { display: flex; align-items: center; gap: 6px; padding: 4px 0; font-size: 13px; }
+.module-list .check-sent { color: var(--ok); font-weight: 700; }
+.module-list .check-unsent { color: #cbd5e1; }
+
 /* Étudiant neutralisé (a quitté l'école) */
 .student-row { border-bottom: 1px solid var(--border); padding: 10px 0; }
 .student-row:last-child { border-bottom: none; }

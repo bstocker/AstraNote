@@ -261,6 +261,15 @@ def test_notes_sent_tracking(app, admin):
         assert db.session.get(Module, mid).notes_sent_method is None
 
 
+def test_dashboard_shows_notes_sent(app, admin):
+    _, mid, _, _ = bootstrap_class(app, admin)
+    html = admin.get("/").get_data(as_text=True)
+    assert "check-unsent" in html          # module listé, non envoyé
+    admin.post(f"/modules/{mid}/notes-sent", data={"notes_sent": "on", "notes_sent_date": "2026-07-01"})
+    html = admin.get("/").get_data(as_text=True)
+    assert "check-sent" in html and "✔" in html
+
+
 def test_dashboard_progress(app, admin):
     cid, mid, ids, enr = bootstrap_class(app, admin)
     _, scid = add_star_column(app, admin, mid)

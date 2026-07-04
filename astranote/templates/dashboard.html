@@ -43,8 +43,8 @@
       </h2>
       <div class="grid-cards">
         {% for c in classes %}
-        <a class="card" href="{{ url_for('main.view_class', class_id=c.id) }}">
-          <h3>{{ c.name }}</h3>
+        <div class="card">
+          <h3><a href="{{ url_for('main.view_class', class_id=c.id) }}">{{ c.name }}</a></h3>
           <div class="meta">{{ c.modules|length }} module(s) · {{ c.enrollments|length }} étudiant(s)</div>
           {% if current_user.is_admin %}<div class="meta">Enseignant : {{ c.teacher.name }}</div>{% endif %}
           {% set p = stats.get(c.id) %}
@@ -54,7 +54,21 @@
           </div>
           <div class="meta">Saisie : {{ p }}%</div>
           {% endif %}
-        </a>
+          {% if c.modules %}
+          <ul class="module-list">
+            {% for m in c.modules %}
+            <li>
+              {% if m.notes_sent %}
+                <span class="check-sent" title="Notes envoyées{% if m.notes_sent_date %} le {{ m.notes_sent_date.strftime('%d/%m/%Y') }}{% endif %}{% if m.notes_sent_method %} · {{ notes_methods[m.notes_sent_method] }}{% endif %}">✔</span>
+              {% else %}
+                <span class="check-unsent" title="Notes non envoyées">○</span>
+              {% endif %}
+              <a href="{{ url_for('modules.view_module', module_id=m.id) }}">{{ m.name }}</a>
+            </li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+        </div>
         {% endfor %}
       </div>
     </div>

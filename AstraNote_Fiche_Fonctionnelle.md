@@ -184,6 +184,7 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
 - Par défaut, l'année la plus récente est présélectionnée.
 - Chaque classe est cliquable et donne accès à ses modules.
 - **Avancement de la saisie** : chaque classe affiche une barre indiquant le pourcentage de cellules d'étoiles remplies (sur l'ensemble de ses modules).
+- **Envoi des notes** : sous chaque classe, la liste de ses modules affiche une **coche verte ✔** pour ceux dont les notes ont été envoyées à l'établissement (○ sinon), avec la date/le moyen en infobulle. Chaque module est cliquable.
 - Périmètre respectant les droits (l'enseignant ne voit que ses classes et ses écoles/années plus les communes).
 
 ### 5.10 Recherche d'étudiant
