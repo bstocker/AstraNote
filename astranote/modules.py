@@ -134,27 +134,25 @@ def view_module(module_id):
             NoteValue.note_column_id.in_(note_col_ids)).all():
             note_map[(n.subject_id, n.note_column_id)] = n.score
 
-    # Étudiants encore non affectés à un groupe (mode groupe). Actifs d'abord,
-    # neutralisés ensuite ; le menu d'affectation ne propose que les actifs.
-    unassigned = []
+    # Étudiants actifs encore non affectés à un groupe (mode groupe). Les
+    # étudiants neutralisés (partis) n'ont pas besoin d'être affectés.
     unassigned_active = []
     if module.is_group_mode:
         assigned = {
             m.student_id for g in module.groups for m in g.members
         }
-        unassigned = sorted(
+        unassigned_active = sorted(
             (e.student for e in module.klass.enrollments
-             if e.student.id not in assigned),
-            key=lambda s: (not s.active, s.full_name.lower()),
+             if e.student.id not in assigned and e.student.active),
+            key=lambda s: s.full_name.lower(),
         )
-        unassigned_active = [s for s in unassigned if s.active]
 
     return render_template(
         "modules/module_detail.html",
         module=module, subjects=subjects, grades=grades,
         star_map=star_map, url_map=url_map, note_map=note_map,
         all_tokens=grading.ALL_TOKENS, special_statuses=grading.SPECIAL_STATUSES,
-        unassigned=unassigned, unassigned_active=unassigned_active,
+        unassigned_active=unassigned_active,
     )
 
 

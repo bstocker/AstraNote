@@ -146,7 +146,7 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
 ### 5.4bis Groupes (modules en mode groupe)
 - Pour un module en mode groupe, **création des groupes** et affectation des étudiants de la classe à un groupe.
 - Un groupe porte un nom (ex. « Groupe 1 »).
-- **Étudiants sans groupe** : un encart met en évidence les étudiants de la classe **non encore affectés** à un groupe (avec leur nombre), et permet de les affecter directement. Les étudiants neutralisés y sont signalés. Un message confirme lorsque tous les étudiants sont affectés.
+- **Étudiants sans groupe** : un encart met en évidence les étudiants **actifs** de la classe **non encore affectés** à un groupe (avec leur nombre), et permet de les affecter directement. Les étudiants **neutralisés** (ayant quitté l'école) n'ont pas besoin de groupe et **n'y figurent pas**. Un message confirme lorsque tous les étudiants actifs sont affectés.
 - La suite du processus est **identique** au mode individuel — étoiles, notes, commentaire — mais s'applique au **groupe entier** (une ligne par groupe au lieu d'une ligne par étudiant).
 
 ### 5.5 Vue module et saisie des étoiles
