@@ -83,6 +83,28 @@ def create_module(class_id):
     return redirect(url_for("modules.view_module", module_id=module.id))
 
 
+@modules_bp.route("/modules/<int:module_id>/edit", methods=["POST"])
+@login_required
+def edit_module(module_id):
+    """Édite un module : nom, salon et lien Discord.
+
+    Le mode de travail (individuel/groupe) n'est PAS modifiable après création
+    (il conditionne groupes et notes déjà saisis — cf. fiche §2).
+    """
+    module = get_module_or_403(module_id)
+    name = request.form.get("name", "").strip()
+    if not name:
+        flash("Le nom du module est requis.", "error")
+        return redirect(url_for("modules.view_module", module_id=module.id))
+
+    module.name = name
+    module.discord_channel = request.form.get("discord_channel", "").strip() or None
+    module.discord_url = request.form.get("discord_url", "").strip() or None
+    db.session.commit()
+    flash("Module mis à jour.", "success")
+    return redirect(url_for("modules.view_module", module_id=module.id))
+
+
 @modules_bp.route("/modules/<int:module_id>/delete", methods=["POST"])
 @login_required
 def delete_module(module_id):

@@ -16,7 +16,11 @@
     </h1>
     <p class="muted">
       {{ klass.school.name }} · {{ klass.academic_year.label }}
-      {% if module.discord_channel %} · #{{ module.discord_channel }}{% endif %}
+      {% if module.discord_channel or module.discord_url %} ·
+        {% if module.discord_url %}
+          <a href="{{ module.discord_url }}" target="_blank" rel="noopener">💬 {{ module.discord_channel or 'Discord' }} ↗</a>
+        {% else %}#{{ module.discord_channel }}{% endif %}
+      {% endif %}
     </p>
   </div>
   <form method="post" action="{{ url_for('modules.delete_module', module_id=module.id) }}"
@@ -24,6 +28,26 @@
     <button class="btn danger small" type="submit">Supprimer le module</button>
   </form>
 </div>
+
+<details class="tool">
+  <summary>⚙ Éditer le module</summary>
+  <div class="panel" style="max-width:620px;">
+    <form method="post" action="{{ url_for('modules.edit_module', module_id=module.id) }}">
+      <label>Nom du module</label>
+      <input type="text" name="name" value="{{ module.name }}" required>
+      <div class="row">
+        <div><label>Salon Discord (nom)</label>
+          <input type="text" name="discord_channel" value="{{ module.discord_channel or '' }}" placeholder="crypto-b3"></div>
+        <div><label>Lien Discord (URL)</label>
+          <input type="url" name="discord_url" value="{{ module.discord_url or '' }}" placeholder="https://discord.com/channels/…"></div>
+      </div>
+      <p class="help">Le mode de travail ({{ 'groupe' if module.is_group_mode else 'individuel' }}) n'est pas modifiable après création.</p>
+      <div style="margin-top:12px;">
+        <button class="btn" type="submit">Enregistrer</button>
+      </div>
+    </form>
+  </div>
+</details>
 
 {% if module.is_group_mode and not module.groups %}
   <div class="flash error">Ce module est en mode groupe : créez des groupes ci-dessous avant de saisir les étoiles.</div>

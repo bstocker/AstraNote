@@ -80,6 +80,8 @@ def _run_migrations(app):
     add_column_if_missing("academic_year", "teacher_id", "INTEGER")
     # Évolution : neutralisation d'un étudiant (actif par défaut).
     add_column_if_missing("student", "active", "BOOLEAN NOT NULL DEFAULT 1")
+    # Évolution : lien Discord cliquable sur un module.
+    add_column_if_missing("module", "discord_url", "VARCHAR(500)")
 
 
 def _ensure_admin(app):

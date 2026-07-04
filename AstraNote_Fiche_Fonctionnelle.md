@@ -128,6 +128,7 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
 ### 5.3 Modules, dates et colonnes
 - CRUD **modules** au sein d'une classe.
 - À la création d'un module, choix du **mode de travail** : **individuel** ou **en groupe**.
+- **Édition d'un module** : nom, salon Discord et **lien Discord** (URL cliquable). Le mode de travail n'est **pas** modifiable après création (il conditionne groupes et notes déjà saisis).
 - Ajout de **dates** (séances) dans un module.
 - **Plusieurs colonnes d'étoiles par date** : une date peut porter autant d'exercices (colonnes) que nécessaire.
 - **Ajout d'une colonne d'étoiles à tout moment**, y compris sur une date **existante**, avec un intitulé (ex. « CMAKE », « Projet »).
@@ -195,7 +196,7 @@ School(id, name, teacher_id)                  # teacher_id = propriétaire ; NUL
 AcademicYear(id, label, teacher_id)           # ex. "2025-2026" ; NULL = année commune (admin)
 Teacher(id, name, email, password_hash, role) # role = admin | teacher
 Class(id, name, school_id, academic_year_id, teacher_id)
-Module(id, name, discord_channel, class_id, work_mode)  # work_mode = individual | group
+Module(id, name, discord_channel, discord_url, class_id, work_mode)  # work_mode = individual | group ; discord_url = lien cliquable
 GradeDate(id, module_id, label, date, position)      # une date/séance
 StarColumn(id, grade_date_id, title, position)        # colonne d'étoiles ; title = titre de l'exercice
 UrlColumn(id, grade_date_id, title, position)         # colonne de liens rattachée à une date
