@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Tableau de bord — AstraNote{% endblock %}
+{% block content %}
+<div class="flex-between">
+  <div>
+    <h1>Tableau de bord</h1>
+    <p class="muted">
+      {% if current_user.is_admin %}Toutes les classes de la base.{% else %}Vos classes.{% endif %}
+    </p>
+  </div>
+  <a class="btn" href="{{ url_for('main.create_class') }}">+ Nouvelle classe</a>
+</div>
+
+{% if not classes %}
+  <div class="panel">
+    <p>Aucune classe pour l'instant.</p>
+    {% if current_user.is_admin and (not schools or not years) %}
+      <p class="muted">Commencez par créer une <a href="{{ url_for('main.schools') }}">école et une année académique</a>.</p>
+    {% else %}
+      <a class="btn" href="{{ url_for('main.create_class') }}">Créer une classe</a>
+    {% endif %}
+  </div>
+{% else %}
+  <div class="grid-cards">
+    {% for c in classes %}
+    <a class="card" href="{{ url_for('main.view_class', class_id=c.id) }}">
+      <h3>{{ c.name }}</h3>
+      <div class="meta">{{ c.school.name }} · {{ c.academic_year.label }}</div>
+      <div class="meta">{{ c.modules|length }} module(s) · {{ c.enrollments|length }} étudiant(s)</div>
+      {% if current_user.is_admin %}<div class="meta">Enseignant : {{ c.teacher.name }}</div>{% endif %}
+    </a>
+    {% endfor %}
+  </div>
+{% endif %}
+{% endblock %}

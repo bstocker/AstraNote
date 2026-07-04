@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}AstraNote{% endblock %}</title>
+  <link rel="icon" href="{{ url_for('static', filename='img/icon.png') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+{% if current_user.is_authenticated %}
+<header class="topbar">
+  <a href="{{ url_for('main.dashboard') }}"><img class="logo" src="{{ url_for('static', filename='img/logo.png') }}" alt="AstraNote"></a>
+  <nav>
+    <a href="{{ url_for('main.dashboard') }}">Tableau de bord</a>
+    {% if current_user.is_admin %}
+      <a href="{{ url_for('main.schools') }}">Écoles &amp; années</a>
+      <a href="{{ url_for('auth.teachers') }}">Enseignants</a>
+    {% endif %}
+    <a href="{{ url_for('main.create_class') }}">+ Classe</a>
+  </nav>
+  <div class="spacer"></div>
+  <form class="search" action="{{ url_for('main.search') }}" method="get">
+    <input type="text" name="q" placeholder="Rechercher un étudiant…" value="{{ request.args.get('q','') }}">
+    <button type="submit">🔍</button>
+  </form>
+  <span class="user">{{ current_user.name }}{% if current_user.is_admin %} · admin{% endif %}</span>
+  <a href="{{ url_for('auth.logout') }}" class="user">Déconnexion</a>
+</header>
+{% endif %}
+
+<main class="container">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+      <div class="flash {{ category }}">{{ message }}</div>
+    {% endfor %}
+  {% endwith %}
+  {% block content %}{% endblock %}
+</main>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

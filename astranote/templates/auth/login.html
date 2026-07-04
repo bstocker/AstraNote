@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Connexion — AstraNote{% endblock %}
+{% block content %}
+<div style="max-width: 380px; margin: 6vh auto;">
+  <div style="text-align:center; margin-bottom: 20px;">
+    <img src="{{ url_for('static', filename='img/logo.png') }}" alt="AstraNote" style="height:56px;">
+    <p class="muted">Suivi et notation des étudiants</p>
+  </div>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+      <div class="flash {{ category }}">{{ message }}</div>
+    {% endfor %}
+  {% endwith %}
+  <div class="panel">
+    <form method="post">
+      <label>Email</label>
+      <input type="email" name="email" autofocus required>
+      <label>Mot de passe</label>
+      <input type="password" name="password" required>
+      <div style="margin-top:16px;">
+        <button class="btn" type="submit" style="width:100%;">Se connecter</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

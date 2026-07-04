@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+{% block title %}{{ module.name }} — AstraNote{% endblock %}
+{% block content %}
+{% set klass = module.klass %}
+<div class="crumbs">
+  <a href="{{ url_for('main.dashboard') }}">Tableau de bord</a> ›
+  <a href="{{ url_for('main.view_class', class_id=klass.id) }}">{{ klass.name }}</a> ›
+  {{ module.name }}
+</div>
+
+<div class="flex-between">
+  <div>
+    <h1>{{ module.name }}
+      {% if module.is_group_mode %}<span class="badge group">groupe</span>
+      {% else %}<span class="badge">individuel</span>{% endif %}
+    </h1>
+    <p class="muted">
+      {{ klass.school.name }} · {{ klass.academic_year.label }}
+      {% if module.discord_channel %} · #{{ module.discord_channel }}{% endif %}
+    </p>
+  </div>
+  <form method="post" action="{{ url_for('modules.delete_module', module_id=module.id) }}"
+        onsubmit="return confirm('Supprimer ce module ?');">
+    <button class="btn danger small" type="submit">Supprimer le module</button>
+  </form>
+</div>
+
+{% if module.is_group_mode and not module.groups %}
+  <div class="flash error">Ce module est en mode groupe : créez des groupes ci-dessous avant de saisir les étoiles.</div>
+{% endif %}
+
+<!-- ---------------- Grille ---------------- -->
+<div class="grid-wrap">
+  <table class="grid" id="grid"
+         data-save-star="{{ url_for('modules.save_star', module_id=module.id) }}"
+         data-save-note="{{ url_for('modules.save_note', module_id=module.id) }}"
+         data-save-url="{{ url_for('modules.save_url', module_id=module.id) }}"
+         data-save-comment="{{ url_for('modules.save_comment', module_id=module.id) }}">
+    <thead>
+      <tr>
+        <th class="subject" rowspan="2">{{ 'Groupe' if module.is_group_mode else 'Étudiant' }}</th>
+        {% for gd in module.grade_dates %}
+          {% set span = gd.star_columns|length + gd.url_columns|length %}
+          <th class="date-head" colspan="{{ span if span > 0 else 1 }}">
+            {{ gd.date.strftime('%d/%m/%Y') if gd.date else '' }}{% if gd.label %} · {{ gd.label }}{% endif %}
+            <form method="post" action="{{ url_for('modules.delete_date', date_id=gd.id) }}" style="display:inline;"
+                  onsubmit="return confirm('Supprimer cette date et ses colonnes ?');">
+              <button class="btn danger small" type="submit" title="Supprimer la date">✕</button>
+            </form>
+          </th>
+        {% endfor %}
+        <th class="total" rowspan="2">Total ★</th>
+        <th class="note20" rowspan="2">Note /20</th>
+        {% for nc in module.note_columns %}
+          <th class="note-head" rowspan="2">
+            {{ nc.title }}
+            <form method="post" action="{{ url_for('modules.delete_note_column', col_id=nc.id) }}" style="display:inline;"
+                  onsubmit="return confirm('Supprimer cette colonne de note ?');">
+              <button class="btn danger small" type="submit">✕</button>
+            </form>
+          </th>
+        {% endfor %}
+        <th rowspan="2">Commentaire</th>
+      </tr>
+      <tr>
+        {% for gd in module.grade_dates %}
+          {% for sc in gd.star_columns %}
+            <th>{{ sc.title }}
+              <form method="post" action="{{ url_for('modules.delete_star_column', col_id=sc.id) }}" style="display:inline;"
+                    onsubmit="return confirm('Supprimer cette colonne ?');">
+                <button class="btn danger small" type="submit">✕</button>
+              </form>
+            </th>
+          {% endfor %}
+          {% for uc in gd.url_columns %}
+            <th class="url-head">{{ uc.title }} 🔗
+              <form method="post" action="{{ url_for('modules.delete_url_column', col_id=uc.id) }}" style="display:inline;"
+                    onsubmit="return confirm('Supprimer cette colonne ?');">
+                <button class="btn danger small" type="submit">✕</button>
+              </form>
+            </th>
+          {% endfor %}
+          {% if gd.star_columns|length + gd.url_columns|length == 0 %}
+            <th class="muted" style="font-weight:400;">—</th>
+          {% endif %}
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for subj in subjects %}
+        {% set g = grades.get(subj.id, {'total':0,'note':none,'is_reference':false}) %}
+        <tr class="{{ 'reference' if g.is_reference else '' }}">
+          <td class="subject">{{ subj.label }}</td>
+          {% for gd in module.grade_dates %}
+            {% for sc in gd.star_columns %}
+              {% set val = star_map.get((subj.id, sc.id), '0') %}
+              {% set color = special_statuses.get(val) %}
+              <td class="star-cell {{ 'st-' ~ color if color else '' }}"
+                  data-subject="{{ subj.id }}" data-column="{{ sc.id }}">
+                <select class="star-select">
+                  {% for tok in all_tokens %}
+                    <option value="{{ tok }}" {{ 'selected' if val == tok else '' }}>
+                      {%- if tok in special_statuses -%}{{ tok }}
+                      {%- elif tok == '0' -%}—
+                      {%- else -%}{{ '★' * (tok|int) }}{%- endif -%}
+                    </option>
+                  {% endfor %}
+                </select>
+              </td>
+            {% endfor %}
+            {% for uc in gd.url_columns %}
+              {% set uval = url_map.get((subj.id, uc.id), '') %}
+              <td class="url-cell" data-subject="{{ subj.id }}" data-column="{{ uc.id }}">
+                <input type="url" class="url-input" value="{{ uval or '' }}" placeholder="https://…">
+                {% if uval %}<a href="{{ uval }}" target="_blank" rel="noopener">↗</a>{% endif %}
+              </td>
+            {% endfor %}
+            {% if gd.star_columns|length + gd.url_columns|length == 0 %}<td></td>{% endif %}
+          {% endfor %}
+          <td class="total" data-total="{{ subj.id }}">{{ g.total }}</td>
+          <td class="note20 {{ 'ref' if g.is_reference else '' }}" data-note20="{{ subj.id }}">
+            {{ 'N/A' if g.note is none else g.note }}
+          </td>
+          {% for nc in module.note_columns %}
+            {% set nval = note_map.get((subj.id, nc.id)) %}
+            <td class="note-cell" data-subject="{{ subj.id }}" data-column="{{ nc.id }}">
+              <input type="number" step="0.5" min="0" max="20" class="note-input"
+                     value="{{ '' if nval is none else nval }}">
+            </td>
+          {% endfor %}
+          <td class="comment-cell" data-subject="{{ subj.id }}">
+            <textarea class="comment-input" placeholder="Appréciation…">{{ subj.comment or '' }}</textarea>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td class="subject muted">Aucun {{ 'groupe' if module.is_group_mode else 'étudiant' }}.</td>
+            <td colspan="99" class="muted">
+              {% if module.is_group_mode %}Créez des groupes ci-dessous.{% else %}Ajoutez des étudiants à la classe.{% endif %}
+            </td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="help">Cliquez sur une cellule pour saisir 0–4 étoiles ou un statut (ABS, Retard…). La note /20 se recalcule automatiquement (référence = 20/20, prorata arrondi au 0,5).</p>
+
+<!-- ---------------- Outils : dates & colonnes ---------------- -->
+<div class="row">
+  <div class="panel" style="flex:1;">
+    <h2>Ajouter une date / séance</h2>
+    <form method="post" action="{{ url_for('modules.add_date', module_id=module.id) }}" class="inline-form">
+      <div><label>Date</label><input type="date" name="date"></div>
+      <div><label>Libellé (opt.)</label><input type="text" name="label" placeholder="TP réseau"></div>
+      <div style="flex:0 0 auto;"><button class="btn" type="submit">Ajouter</button></div>
+    </form>
+
+    {% if module.grade_dates %}
+    <h2>Ajouter une colonne à une date</h2>
+    <form method="post" id="addColForm" class="inline-form"
+          data-star-action="{{ url_for('modules.add_star_column', date_id=0) }}"
+          data-url-action="{{ url_for('modules.add_url_column', date_id=0) }}">
+      <div><label>Date</label>
+        <select id="colDate">
+          {% for gd in module.grade_dates %}
+          <option value="{{ gd.id }}">{{ gd.date.strftime('%d/%m/%Y') if gd.date else '' }}{% if gd.label %} · {{ gd.label }}{% endif %}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div><label>Type</label>
+        <select id="colType"><option value="star">Étoiles</option><option value="url">Lien (URL)</option></select>
+      </div>
+      <div><label>Intitulé</label><input type="text" id="colTitle" placeholder="CMAKE, Projet, dépôt GitHub…"></div>
+      <div style="flex:0 0 auto;"><button class="btn" type="submit">Ajouter la colonne</button></div>
+    </form>
+    <p class="help">Vous pouvez ajouter une colonne d'étoiles à tout moment, y compris sur une date existante.</p>
+    {% endif %}
+  </div>
+
+  <div class="panel" style="flex:1;">
+    <h2>Colonnes de note manuelles</h2>
+    <p class="help">« Note CC », « Note Examen »… saisies à la main (fond jaune). Indépendantes du calcul d'étoiles.</p>
+    <form method="post" action="{{ url_for('modules.add_note_column', module_id=module.id) }}" class="inline-form">
+      <div><label>Intitulé</label><input type="text" name="title" placeholder="Note CC" required></div>
+      <div style="flex:0 0 auto;"><button class="btn" type="submit">Ajouter</button></div>
+    </form>
+  </div>
+</div>
+
+<!-- ---------------- Groupes ---------------- -->
+{% if module.is_group_mode %}
+<div class="panel">
+  <div class="flex-between">
+    <h2>Groupes</h2>
+    <form method="post" action="{{ url_for('modules.add_group', module_id=module.id) }}" class="inline-form">
+      <div><input type="text" name="name" placeholder="Groupe 1" required></div>
+      <div><button class="btn small" type="submit">+ Groupe</button></div>
+    </form>
+  </div>
+  <div class="grid-cards">
+    {% for grp in module.groups %}
+    <div class="card">
+      <div class="flex-between">
+        <h3>{{ grp.name }}</h3>
+        <form method="post" action="{{ url_for('modules.delete_group', group_id=grp.id) }}"
+              onsubmit="return confirm('Supprimer ce groupe ?');"><button class="btn danger small">✕</button></form>
+      </div>
+      <ul style="padding-left:16px; margin:8px 0;">
+        {% for mem in grp.members %}
+        <li>{{ mem.student.full_name }}
+          <form method="post" action="{{ url_for('modules.remove_group_member', member_id=mem.id) }}" style="display:inline;">
+            <button class="btn danger small" style="padding:0 5px;">✕</button>
+          </form>
+        </li>
+        {% else %}<li class="muted">Vide</li>{% endfor %}
+      </ul>
+      {% if unassigned %}
+      <form method="post" action="{{ url_for('modules.add_group_member', group_id=grp.id) }}" class="inline-form">
+        <div><select name="student_id">
+          {% for st in unassigned %}<option value="{{ st.id }}">{{ st.full_name }}</option>{% endfor %}
+        </select></div>
+        <div><button class="btn small secondary" type="submit">Affecter</button></div>
+      </form>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% if unassigned %}
+  <p class="help">Non affectés : {{ unassigned|map(attribute='full_name')|join(', ') }}</p>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/grid.js') }}"></script>
+{% endblock %}

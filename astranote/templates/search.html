@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Recherche — AstraNote{% endblock %}
+{% block content %}
+<h1>Recherche d'étudiant</h1>
+<form method="get" action="{{ url_for('main.search') }}" style="max-width:480px; display:flex; gap:8px;">
+  <input type="text" name="q" value="{{ query }}" placeholder="Nom, email ou pseudo Discord…" autofocus>
+  <button class="btn" type="submit">Rechercher</button>
+</form>
+
+{% if query %}
+  <p class="muted" style="margin-top:14px;">{{ results|length }} résultat(s) pour « {{ query }} ».</p>
+  {% for r in results %}
+  <div class="panel">
+    <h2 style="margin-top:0;">{{ r.student.full_name }}</h2>
+    <p class="muted">
+      {{ r.student.email or '—' }}
+      {% if r.student.discord_alias %} · Discord : {{ r.student.discord_alias }}{% endif %}
+      {% if r.student.github_url %} · <a href="{{ r.student.github_url }}" target="_blank" rel="noopener">GitHub ↗</a>{% endif %}
+    </p>
+    <table class="list-table">
+      <thead><tr><th>École</th><th>Année</th><th>Classe</th><th>Modules</th></tr></thead>
+      <tbody>
+        {% for row in r.rows %}
+        <tr>
+          <td>{{ row.school.name }}</td>
+          <td>{{ row.year.label }}</td>
+          <td><a href="{{ url_for('main.view_class', class_id=row.class.id) }}">{{ row.class.name }}</a></td>
+          <td>
+            {% for m in row.modules %}
+              <a href="{{ url_for('modules.view_module', module_id=m.id) }}">{{ m.name }}</a>{% if not loop.last %}, {% endif %}
+            {% else %}<span class="muted">—</span>{% endfor %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    <div class="panel muted">Aucun étudiant trouvé dans votre périmètre.</div>
+  {% endfor %}
+{% endif %}
+{% endblock %}

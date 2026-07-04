@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Enseignants — AstraNote{% endblock %}
+{% block content %}
+<h1>Comptes enseignants</h1>
+<p class="muted">Créez et gérez les comptes. Chaque enseignant ne voit que ses propres classes.</p>
+
+<div class="panel">
+  <h2>Nouveau compte</h2>
+  <form method="post" action="{{ url_for('auth.create_teacher') }}" class="inline-form">
+    <div><label>Nom</label><input type="text" name="name" required></div>
+    <div><label>Email</label><input type="email" name="email" required></div>
+    <div><label>Mot de passe</label><input type="text" name="password" required></div>
+    <div style="flex:0 0 140px;"><label>Rôle</label>
+      <select name="role">
+        <option value="teacher">Enseignant</option>
+        <option value="admin">Administrateur</option>
+      </select>
+    </div>
+    <div style="flex:0 0 auto;"><button class="btn" type="submit">Créer</button></div>
+  </form>
+</div>
+
+<div class="panel">
+  <table class="list-table">
+    <thead><tr><th>Nom</th><th>Email</th><th>Rôle</th><th>Classes</th><th></th></tr></thead>
+    <tbody>
+      {% for t in teachers %}
+      <tr>
+        <td>{{ t.name }}</td>
+        <td>{{ t.email }}</td>
+        <td>{% if t.is_admin %}<span class="badge">admin</span>{% else %}enseignant{% endif %}</td>
+        <td>{{ t.classes|length }}</td>
+        <td style="text-align:right;">
+          {% if t.id != current_user.id %}
+          <form method="post" action="{{ url_for('auth.delete_teacher', teacher_id=t.id) }}"
+                onsubmit="return confirm('Supprimer ce compte ?');" style="display:inline;">
+            <button class="btn danger small" type="submit">Supprimer</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

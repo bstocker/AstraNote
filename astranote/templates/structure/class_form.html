@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Nouvelle classe — AstraNote{% endblock %}
+{% block content %}
+<h1>Nouvelle classe</h1>
+<div class="panel" style="max-width:560px;">
+  <form method="post">
+    <label>Nom de la classe / promotion</label>
+    <input type="text" name="name" placeholder="B3 ASRBD" required>
+    <div class="row">
+      <div>
+        <label>École</label>
+        <select name="school_id" required>
+          <option value="">—</option>
+          {% for s in schools %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label>Année académique</label>
+        <select name="academic_year_id" required>
+          <option value="">—</option>
+          {% for y in years %}<option value="{{ y.id }}">{{ y.label }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    {% if current_user.is_admin %}
+    <label>Enseignant responsable</label>
+    <select name="teacher_id" required>
+      {% for t in teachers %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}
+    </select>
+    {% endif %}
+    <div style="margin-top:18px;">
+      <button class="btn" type="submit">Créer la classe</button>
+      <a class="btn secondary" href="{{ url_for('main.dashboard') }}">Annuler</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

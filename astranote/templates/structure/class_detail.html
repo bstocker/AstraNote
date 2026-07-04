@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}{{ klass.name }} — AstraNote{% endblock %}
+{% block content %}
+<div class="crumbs">
+  <a href="{{ url_for('main.dashboard') }}">Tableau de bord</a> ›
+  {{ klass.school.name }} · {{ klass.academic_year.label }}
+</div>
+<div class="flex-between">
+  <h1>{{ klass.name }}</h1>
+  <form method="post" action="{{ url_for('main.delete_class', class_id=klass.id) }}"
+        onsubmit="return confirm('Supprimer cette classe et tous ses modules ?');">
+    <button class="btn danger small" type="submit">Supprimer la classe</button>
+  </form>
+</div>
+
+<div class="row">
+  <!-- Modules -->
+  <div class="panel" style="flex:1.3;">
+    <h2>Modules</h2>
+    {% if klass.modules %}
+    <div class="grid-cards">
+      {% for m in klass.modules %}
+      <a class="card" href="{{ url_for('modules.view_module', module_id=m.id) }}">
+        <h3>{{ m.name }}
+          {% if m.is_group_mode %}<span class="badge group">groupe</span>
+          {% else %}<span class="badge">individuel</span>{% endif %}
+        </h3>
+        <div class="meta">
+          {{ m.grade_dates|length }} date(s)
+          {% if m.discord_channel %} · #{{ m.discord_channel }}{% endif %}
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">Aucun module.</p>
+    {% endif %}
+
+    <details class="tool">
+      <summary>+ Ajouter un module</summary>
+      <div>
+        <form method="post" action="{{ url_for('modules.create_module', class_id=klass.id) }}" class="inline-form">
+          <div><label>Nom du module</label><input type="text" name="name" placeholder="Cryptographie" required></div>
+          <div style="flex:0 0 160px;"><label>Mode de travail</label>
+            <select name="work_mode">
+              <option value="individual">Individuel</option>
+              <option value="group">En groupe</option>
+            </select>
+          </div>
+          <div><label>Salon Discord (opt.)</label><input type="text" name="discord_channel"></div>
+          <div style="flex:0 0 auto;"><button class="btn" type="submit">Créer</button></div>
+        </form>
+        <p class="help">Le mode (individuel / groupe) est fixé à la création du module.</p>
+      </div>
+    </details>
+  </div>
+
+  <!-- Étudiants -->
+  <div class="panel" style="flex:1;">
+    <h2>Étudiants ({{ klass.enrollments|length }})</h2>
+    <table class="list-table">
+      <thead><tr><th>Nom</th><th>Discord</th><th></th></tr></thead>
+      <tbody>
+        {% for e in klass.enrollments|sort(attribute='student.full_name') %}
+        <tr>
+          <td>{{ e.student.full_name }}<br><span class="muted" style="font-size:12px;">{{ e.student.email or '' }}</span></td>
+          <td class="muted">{{ e.student.discord_alias or '—' }}</td>
+          <td style="text-align:right;">
+            <form method="post" action="{{ url_for('main.remove_student', enrollment_id=e.id) }}"
+                  onsubmit="return confirm('Retirer cet étudiant ?');" style="display:inline;">
+              <button class="btn danger small" type="submit">✕</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}<tr><td class="muted" colspan="3">Aucun étudiant.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+
+    <details class="tool">
+      <summary>+ Ajouter un étudiant</summary>
+      <div>
+        <form method="post" action="{{ url_for('main.add_student', class_id=klass.id) }}">
+          <label>Nom complet</label>
+          <input type="text" name="full_name" required>
+          <div class="row">
+            <div><label>Email</label><input type="email" name="email" placeholder="prenom.nom@ecoles-epsi.net"></div>
+            <div><label>Pseudo Discord</label><input type="text" name="discord_alias"></div>
+          </div>
+          <label>Lien GitHub (opt.)</label>
+          <input type="url" name="github_url">
+          <div style="margin-top:12px;"><button class="btn" type="submit">Ajouter</button></div>
+        </form>
+      </div>
+    </details>
+  </div>
+</div>
+{% endblock %}

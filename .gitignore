@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+# Base de données locale et dossier d'instance (ne jamais committer)
+instance/
+*.db
+*.sqlite
+*.sqlite3
+
+# OS / éditeurs
+.DS_Store
+.idea/
+.vscode/

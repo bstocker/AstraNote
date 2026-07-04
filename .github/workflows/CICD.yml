@@ -43,9 +43,12 @@ jobs:
             rel="${file#./}"
 
             # Exclusions (adjust to taste)
+            # IMPORTANT : on n'uploade jamais la base SQLite ni le dossier
+            # instance/ pour ne pas écraser les données de production.
             case "$rel" in
               .git/*|.github/*|.venv/*|__pycache__/*|node_modules/*) continue ;;
-              *.pyc|.DS_Store) continue ;;
+              instance/*) continue ;;
+              *.pyc|.DS_Store|*.db|*.sqlite|*.sqlite3) continue ;;
             esac
 
             remote_path="${TARGET_DIR}/${rel}"
@@ -59,10 +62,13 @@ jobs:
 
           done < <(
             find . \
-              -type d \( -name .git -o -name .github -o -name .venv -o -name __pycache__ -o -name node_modules \) -prune -false \
+              -type d \( -name .git -o -name .github -o -name .venv -o -name __pycache__ -o -name node_modules -o -name instance \) -prune -false \
               -o -type f \
                 ! -name ".DS_Store" \
                 ! -name "*.pyc" \
+                ! -name "*.db" \
+                ! -name "*.sqlite" \
+                ! -name "*.sqlite3" \
                 -print0
           )
 
