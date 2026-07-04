@@ -19,7 +19,7 @@ from .models import (
     SUBJECT_STUDENT, SUBJECT_GROUP, WORK_MODE_INDIVIDUAL, WORK_MODE_GROUP,
 )
 from . import grading
-from .main import get_class_or_403
+from .main import get_class_or_403, purge_subject_data
 
 modules_bp = Blueprint("modules", __name__)
 
@@ -300,6 +300,119 @@ def delete_note_column(col_id):
 
 
 # --------------------------------------------------------------------------- #
+# Renommage, réorganisation et édition (dates & colonnes) — fiche §5.3
+# --------------------------------------------------------------------------- #
+def _reorder(item, siblings, direction):
+    """Normalise les positions puis échange `item` avec son voisin (up/down)."""
+    ordered = sorted(siblings, key=lambda x: (x.position or 0, x.id))
+    for i, s in enumerate(ordered):
+        s.position = i
+    idx = ordered.index(item)
+    j = idx + (-1 if direction == "up" else 1)
+    if 0 <= j < len(ordered):
+        ordered[idx].position, ordered[j].position = (
+            ordered[j].position, ordered[idx].position,
+        )
+
+
+@modules_bp.route("/star-columns/<int:col_id>/rename", methods=["POST"])
+@login_required
+def rename_star_column(col_id):
+    col = db.session.get(StarColumn, col_id) or abort(404)
+    module = get_module_or_403(col.grade_date.module_id)
+    title = request.form.get("title", "").strip()
+    if title:
+        col.title = title
+        db.session.commit()
+        flash("Colonne renommée.", "success")
+    return redirect(url_for("modules.view_module", module_id=module.id))
+
+
+@modules_bp.route("/star-columns/<int:col_id>/move", methods=["POST"])
+@login_required
+def move_star_column(col_id):
+    col = db.session.get(StarColumn, col_id) or abort(404)
+    module = get_module_or_403(col.grade_date.module_id)
+    _reorder(col, col.grade_date.star_columns, request.form.get("dir", "up"))
+    db.session.commit()
+    return redirect(url_for("modules.view_module", module_id=module.id))
+
+
+@modules_bp.route("/url-columns/<int:col_id>/rename", methods=["POST"])
+@login_required
+def rename_url_column(col_id):
+    col = db.session.get(UrlColumn, col_id) or abort(404)
+    module = get_module_or_403(col.grade_date.module_id)
+    title = request.form.get("title", "").strip()
+    if title:
+        col.title = title
+        db.session.commit()
+        flash("Colonne renommée.", "success")
+    return redirect(url_for("modules.view_module", module_id=module.id))
+
+
+@modules_bp.route("/url-columns/<int:col_id>/move", methods=["POST"])
+@login_required
+def move_url_column(col_id):
+    col = db.session.get(UrlColumn, col_id) or abort(404)
+    module = get_module_or_403(col.grade_date.module_id)
+    _reorder(col, col.grade_date.url_columns, request.form.get("dir", "up"))
+    db.session.commit()
+    return redirect(url_for("modules.view_module", module_id=module.id))
+
+
+@modules_bp.route("/note-columns/<int:col_id>/rename", methods=["POST"])
+@login_required
+def rename_note_column(col_id):
+    col = db.session.get(NoteColumn, col_id) or abort(404)
+    module = get_module_or_403(col.module_id)
+    title = request.form.get("title", "").strip()
+    if title:
+        col.title = title
+        db.session.commit()
+        flash("Colonne renommée.", "success")
+    return redirect(url_for("modules.view_module", module_id=module.id))
+
+
+@modules_bp.route("/note-columns/<int:col_id>/move", methods=["POST"])
+@login_required
+def move_note_column(col_id):
+    col = db.session.get(NoteColumn, col_id) or abort(404)
+    module = get_module_or_403(col.module_id)
+    _reorder(col, module.note_columns, request.form.get("dir", "up"))
+    db.session.commit()
+    return redirect(url_for("modules.view_module", module_id=module.id))
+
+
+@modules_bp.route("/dates/<int:date_id>/edit", methods=["POST"])
+@login_required
+def edit_date(date_id):
+    gd = db.session.get(GradeDate, date_id) or abort(404)
+    module = get_module_or_403(gd.module_id)
+    from datetime import datetime
+    raw = request.form.get("date", "").strip()
+    if raw:
+        try:
+            gd.date = datetime.strptime(raw, "%Y-%m-%d").date()
+        except ValueError:
+            pass
+    gd.label = request.form.get("label", "").strip() or None
+    db.session.commit()
+    flash("Date mise à jour.", "success")
+    return redirect(url_for("modules.view_module", module_id=module.id))
+
+
+@modules_bp.route("/dates/<int:date_id>/move", methods=["POST"])
+@login_required
+def move_date(date_id):
+    gd = db.session.get(GradeDate, date_id) or abort(404)
+    module = get_module_or_403(gd.module_id)
+    _reorder(gd, module.grade_dates, request.form.get("dir", "up"))
+    db.session.commit()
+    return redirect(url_for("modules.view_module", module_id=module.id))
+
+
+# --------------------------------------------------------------------------- #
 # Groupes (mode groupe)
 # --------------------------------------------------------------------------- #
 @modules_bp.route("/modules/<int:module_id>/groups", methods=["POST"])
@@ -353,6 +466,8 @@ def remove_group_member(member_id):
 def delete_group(group_id):
     group = db.session.get(Group, group_id) or abort(404)
     module = get_module_or_403(group.module_id)
+    # Purge les étoiles/notes/liens du groupe (référencés par subject_id).
+    purge_subject_data(SUBJECT_GROUP, group.id)
     db.session.delete(group)
     db.session.commit()
     flash("Groupe supprimé.", "success")

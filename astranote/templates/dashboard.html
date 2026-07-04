@@ -47,6 +47,13 @@
           <h3>{{ c.name }}</h3>
           <div class="meta">{{ c.modules|length }} module(s) · {{ c.enrollments|length }} étudiant(s)</div>
           {% if current_user.is_admin %}<div class="meta">Enseignant : {{ c.teacher.name }}</div>{% endif %}
+          {% set p = stats.get(c.id) %}
+          {% if p is not none %}
+          <div class="progress" title="Avancement de la saisie des étoiles">
+            <div class="progress-bar" style="width: {{ p }}%;"></div>
+          </div>
+          <div class="meta">Saisie : {{ p }}%</div>
+          {% endif %}
         </a>
         {% endfor %}
       </div>

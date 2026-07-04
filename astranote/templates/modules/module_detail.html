@@ -23,6 +23,7 @@
   </div>
   <form method="post" action="{{ url_for('modules.delete_module', module_id=module.id) }}"
         onsubmit="return confirm('Supprimer ce module ?');">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button class="btn danger small" type="submit">Supprimer le module</button>
   </form>
 </div>
@@ -31,6 +32,7 @@
   <summary>⚙ Éditer le module</summary>
   <div class="panel" style="max-width:620px;">
     <form method="post" action="{{ url_for('modules.edit_module', module_id=module.id) }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label>Nom du module</label>
       <input type="text" name="name" value="{{ module.name }}" required>
       <label>Lien Discord (URL)</label>
@@ -63,6 +65,7 @@
             {{ gd.date.strftime('%d/%m/%Y') if gd.date else '' }}{% if gd.label %} · {{ gd.label }}{% endif %}
             <form method="post" action="{{ url_for('modules.delete_date', date_id=gd.id) }}" style="display:inline;"
                   onsubmit="return confirm('Supprimer cette date et ses colonnes ?');">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button class="btn danger small" type="submit" title="Supprimer la date">✕</button>
             </form>
           </th>
@@ -74,6 +77,7 @@
             {{ nc.title }}
             <form method="post" action="{{ url_for('modules.delete_note_column', col_id=nc.id) }}" style="display:inline;"
                   onsubmit="return confirm('Supprimer cette colonne de note ?');">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button class="btn danger small" type="submit">✕</button>
             </form>
           </th>
@@ -86,6 +90,7 @@
             <th>{{ sc.title }}
               <form method="post" action="{{ url_for('modules.delete_star_column', col_id=sc.id) }}" style="display:inline;"
                     onsubmit="return confirm('Supprimer cette colonne ?');">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button class="btn danger small" type="submit">✕</button>
               </form>
             </th>
@@ -94,6 +99,7 @@
             <th class="url-head">{{ uc.title }} 🔗
               <form method="post" action="{{ url_for('modules.delete_url_column', col_id=uc.id) }}" style="display:inline;"
                     onsubmit="return confirm('Supprimer cette colonne ?');">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button class="btn danger small" type="submit">✕</button>
               </form>
             </th>
@@ -166,6 +172,7 @@
   <div class="panel" style="flex:1;">
     <h2>Ajouter une date / séance</h2>
     <form method="post" action="{{ url_for('modules.add_date', module_id=module.id) }}" class="inline-form">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div><label>Date</label><input type="date" name="date"></div>
       <div><label>Libellé (opt.)</label><input type="text" name="label" placeholder="TP réseau"></div>
       <div style="flex:0 0 auto;"><button class="btn" type="submit">Ajouter</button></div>
@@ -176,6 +183,7 @@
     <form method="post" id="addColForm" class="inline-form"
           data-star-action="{{ url_for('modules.add_star_column', date_id=0) }}"
           data-url-action="{{ url_for('modules.add_url_column', date_id=0) }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div><label>Date</label>
         <select id="colDate">
           {% for gd in module.grade_dates %}
@@ -197,6 +205,7 @@
     <h2>Colonnes de note manuelles</h2>
     <p class="help">« Note CC », « Note Examen »… saisies à la main (fond jaune). Indépendantes du calcul d'étoiles.</p>
     <form method="post" action="{{ url_for('modules.add_note_column', module_id=module.id) }}" class="inline-form">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div><label>Intitulé</label><input type="text" name="title" placeholder="Note CC" required></div>
       <div style="flex:0 0 auto;"><button class="btn" type="submit">Ajouter</button></div>
     </form>
@@ -206,6 +215,7 @@
     <a class="btn secondary small" href="{{ url_for('modules.export_module', module_id=module.id) }}">⬇ Exporter (.xlsx)</a>
     <form method="post" action="{{ url_for('modules.import_module', module_id=module.id) }}"
           enctype="multipart/form-data" class="inline-form" style="margin-top:10px;">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div><input type="file" name="file" accept=".xlsx" required></div>
       <div style="flex:0 0 auto;"><button class="btn small" type="submit">⬆ Importer</button></div>
     </form>
@@ -213,12 +223,90 @@
   </div>
 </div>
 
+<!-- ---------------- Gérer dates & colonnes ---------------- -->
+{% if module.grade_dates or module.note_columns %}
+<details class="tool">
+  <summary>⚙ Renommer / réorganiser les dates &amp; colonnes</summary>
+  <div class="panel">
+    {% macro mv(action, cid, dir, label) %}
+      <form method="post" action="{{ action }}" style="display:inline;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="dir" value="{{ dir }}">
+        <button class="btn secondary small" type="submit" title="{{ label }}">{{ '↑' if dir=='up' else '↓' }}</button>
+      </form>
+    {% endmacro %}
+
+    {% for gd in module.grade_dates %}
+    <div class="manage-date">
+      <div class="flex-between">
+        <form method="post" action="{{ url_for('modules.edit_date', date_id=gd.id) }}" class="inline-form" style="flex:1;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div style="flex:0 0 160px;"><input type="date" name="date" value="{{ gd.date.isoformat() if gd.date else '' }}"></div>
+          <div><input type="text" name="label" value="{{ gd.label or '' }}" placeholder="Libellé de la séance"></div>
+          <div style="flex:0 0 auto;"><button class="btn small" type="submit">Enregistrer</button></div>
+        </form>
+        <div style="flex:0 0 auto; margin-left:8px;">
+          {{ mv(url_for('modules.move_date', date_id=gd.id), gd.id, 'up', 'Monter la date') }}
+          {{ mv(url_for('modules.move_date', date_id=gd.id), gd.id, 'down', 'Descendre la date') }}
+        </div>
+      </div>
+      <ul class="manage-cols">
+        {% for sc in gd.star_columns %}
+        <li>
+          <span class="tag star">★</span>
+          <form method="post" action="{{ url_for('modules.rename_star_column', col_id=sc.id) }}" class="inline-form" style="display:inline-flex;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="text" name="title" value="{{ sc.title }}">
+            <button class="btn small" type="submit">OK</button>
+          </form>
+          {{ mv(url_for('modules.move_star_column', col_id=sc.id), sc.id, 'up', 'Gauche') }}
+          {{ mv(url_for('modules.move_star_column', col_id=sc.id), sc.id, 'down', 'Droite') }}
+        </li>
+        {% endfor %}
+        {% for uc in gd.url_columns %}
+        <li>
+          <span class="tag url">🔗</span>
+          <form method="post" action="{{ url_for('modules.rename_url_column', col_id=uc.id) }}" class="inline-form" style="display:inline-flex;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="text" name="title" value="{{ uc.title }}">
+            <button class="btn small" type="submit">OK</button>
+          </form>
+          {{ mv(url_for('modules.move_url_column', col_id=uc.id), uc.id, 'up', 'Gauche') }}
+          {{ mv(url_for('modules.move_url_column', col_id=uc.id), uc.id, 'down', 'Droite') }}
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endfor %}
+
+    {% if module.note_columns %}
+    <h2>Colonnes de note</h2>
+    <ul class="manage-cols">
+      {% for nc in module.note_columns %}
+      <li>
+        <span class="tag note">Note</span>
+        <form method="post" action="{{ url_for('modules.rename_note_column', col_id=nc.id) }}" class="inline-form" style="display:inline-flex;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="text" name="title" value="{{ nc.title }}">
+          <button class="btn small" type="submit">OK</button>
+        </form>
+        {{ mv(url_for('modules.move_note_column', col_id=nc.id), nc.id, 'up', 'Monter') }}
+        {{ mv(url_for('modules.move_note_column', col_id=nc.id), nc.id, 'down', 'Descendre') }}
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+</details>
+{% endif %}
+
 <!-- ---------------- Groupes ---------------- -->
 {% if module.is_group_mode %}
 <div class="panel">
   <div class="flex-between">
     <h2>Groupes</h2>
     <form method="post" action="{{ url_for('modules.add_group', module_id=module.id) }}" class="inline-form">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div><input type="text" name="name" placeholder="Groupe 1" required></div>
       <div><button class="btn small" type="submit">+ Groupe</button></div>
     </form>
@@ -229,12 +317,14 @@
       <div class="flex-between">
         <h3>{{ grp.name }}</h3>
         <form method="post" action="{{ url_for('modules.delete_group', group_id=grp.id) }}"
-              onsubmit="return confirm('Supprimer ce groupe ?');"><button class="btn danger small">✕</button></form>
+              onsubmit="return confirm('Supprimer ce groupe ?');">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn danger small">✕</button></form>
       </div>
       <ul style="padding-left:16px; margin:8px 0;">
         {% for mem in grp.members %}
         <li>{{ mem.student.full_name }}
           <form method="post" action="{{ url_for('modules.remove_group_member', member_id=mem.id) }}" style="display:inline;">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button class="btn danger small" style="padding:0 5px;">✕</button>
           </form>
         </li>
@@ -242,6 +332,7 @@
       </ul>
       {% if unassigned_active %}
       <form method="post" action="{{ url_for('modules.add_group_member', group_id=grp.id) }}" class="inline-form">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div><select name="student_id">
           {% for st in unassigned_active %}<option value="{{ st.id }}">{{ st.full_name }}</option>{% endfor %}
         </select></div>
@@ -263,6 +354,7 @@
         {% if module.groups %}
         <form method="post" action="{{ url_for('modules.add_group_member', group_id=0) }}"
               class="assign-inline" data-base="{{ url_for('modules.add_group_member', group_id=0) }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="student_id" value="{{ st.id }}">
           <select onchange="if(this.value){this.form.action=this.form.dataset.base.replace('/groups/0/','/groups/'+this.value+'/');this.form.submit();}">
             <option value="">→ affecter à…</option>

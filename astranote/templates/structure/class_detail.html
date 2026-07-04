@@ -9,6 +9,7 @@
   <h1>{{ klass.name }}</h1>
   <form method="post" action="{{ url_for('main.delete_class', class_id=klass.id) }}"
         onsubmit="return confirm('Supprimer cette classe et tous ses modules ?');">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button class="btn danger small" type="submit">Supprimer la classe</button>
   </form>
 </div>
@@ -40,6 +41,7 @@
       <summary>+ Ajouter un module</summary>
       <div>
         <form method="post" action="{{ url_for('modules.create_module', class_id=klass.id) }}" class="inline-form">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <div><label>Nom du module</label><input type="text" name="name" placeholder="Cryptographie" required></div>
           <div style="flex:0 0 160px;"><label>Mode de travail</label>
             <select name="work_mode">
@@ -72,10 +74,12 @@
           <div style="display:flex; gap:6px; flex:0 0 auto;">
             <form method="post" action="{{ url_for('main.toggle_student_active', enrollment_id=e.id) }}"
                   title="{{ 'Réintégrer cet étudiant au calcul' if not st.active else 'Neutraliser (a quitté l\'école)' }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button class="btn small secondary" type="submit">{{ 'Réactiver' if not st.active else 'Neutraliser' }}</button>
             </form>
             <form method="post" action="{{ url_for('main.remove_student', enrollment_id=e.id) }}"
                   onsubmit="return confirm('Retirer définitivement cet étudiant ?');">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button class="btn danger small" type="submit" title="Retirer de la classe">✕</button>
             </form>
           </div>
@@ -84,6 +88,7 @@
           <summary>Éditer</summary>
           <div>
             <form method="post" action="{{ url_for('main.edit_student', enrollment_id=e.id) }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <label>Nom complet</label>
               <input type="text" name="full_name" value="{{ st.full_name }}" required>
               <div class="row">
@@ -105,6 +110,7 @@
       <summary>+ Ajouter un étudiant</summary>
       <div>
         <form method="post" action="{{ url_for('main.add_student', class_id=klass.id) }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <label>Nom complet</label>
           <input type="text" name="full_name" required>
           <div class="row">

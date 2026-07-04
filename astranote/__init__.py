@@ -8,6 +8,7 @@ import secrets
 
 from flask import Flask
 from flask_login import LoginManager
+from flask_wtf import CSRFProtect
 from werkzeug.security import generate_password_hash
 
 from config import Config, INSTANCE_DIR
@@ -16,6 +17,7 @@ from .models import db, Teacher
 login_manager = LoginManager()
 login_manager.login_view = "auth.login"
 login_manager.login_message = "Veuillez vous connecter pour accéder à cette page."
+csrf = CSRFProtect()
 
 
 @login_manager.user_loader
@@ -31,6 +33,7 @@ def create_app(config_object=Config):
 
     db.init_app(app)
     login_manager.init_app(app)
+    csrf.init_app(app)
 
     from .auth import auth_bp
     from .main import main_bp

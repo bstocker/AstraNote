@@ -13,9 +13,43 @@ from sqlalchemy import or_
 
 from .models import (
     db, School, AcademicYear, Class, Module, Student, Enrollment, Teacher,
+    Star, UrlValue, NoteValue, SUBJECT_STUDENT, SUBJECT_GROUP,
 )
 
 main_bp = Blueprint("main", __name__)
+
+
+# --------------------------------------------------------------------------- #
+# Nettoyage des données orphelines
+# --------------------------------------------------------------------------- #
+def purge_subject_data(subject_type, subject_id,
+                       star_col_ids=None, url_col_ids=None, note_col_ids=None):
+    """Supprime les étoiles / notes / liens d'un sujet (étudiant ou groupe).
+
+    Ces tables référencent `subject_id` sans clé étrangère : sans ce nettoyage,
+    supprimer un étudiant/groupe laisserait des lignes orphelines. Si une liste
+    de colonnes est fournie, on se limite à celles-ci ; sinon on purge tout.
+    """
+    def _delete(model, col_attr, col_ids):
+        q = model.query.filter_by(subject_type=subject_type, subject_id=subject_id)
+        if col_ids is not None:
+            q = q.filter(col_attr.in_(col_ids or [0]))
+        q.delete(synchronize_session=False)
+
+    _delete(Star, Star.star_column_id, star_col_ids)
+    _delete(UrlValue, UrlValue.url_column_id, url_col_ids)
+    _delete(NoteValue, NoteValue.note_column_id, note_col_ids)
+
+
+def _class_column_ids(klass):
+    """Colonnes (étoiles, URL, notes) de tous les modules d'une classe."""
+    star_ids, url_ids, note_ids = [], [], []
+    for m in klass.modules:
+        note_ids += [nc.id for nc in m.note_columns]
+        for gd in m.grade_dates:
+            star_ids += [sc.id for sc in gd.star_columns]
+            url_ids += [uc.id for uc in gd.url_columns]
+    return star_ids, url_ids, note_ids
 
 
 # --------------------------------------------------------------------------- #
@@ -97,10 +131,38 @@ def dashboard():
             for school, cls in sorted(by_school.items(), key=lambda kv: kv[0].name.lower())
         ]
 
+    stats = {c.id: class_saisie_progress(c)
+             for _, cls in groups for c in cls}
+
     return render_template(
         "dashboard.html", years=years, groups=groups,
-        selected_year_id=selected_year_id,
+        selected_year_id=selected_year_id, stats=stats,
     )
+
+
+def class_saisie_progress(klass):
+    """Avancement de saisie d'une classe : % de cellules d'étoiles remplies.
+
+    Une cellule = un sujet (étudiant actif ou groupe) × une colonne d'étoiles.
+    Retourne None si aucune cellule possible (aucune colonne / aucun sujet).
+    """
+    total, filled = 0, 0
+    for module in klass.modules:
+        star_col_ids = [sc.id for gd in module.grade_dates for sc in gd.star_columns]
+        if module.is_group_mode:
+            subj_count = len(module.groups)
+            stype = SUBJECT_GROUP
+        else:
+            subj_count = sum(1 for e in klass.enrollments if e.student.active)
+            stype = SUBJECT_STUDENT
+        total += subj_count * len(star_col_ids)
+        if star_col_ids and subj_count:
+            filled += Star.query.filter(
+                Star.subject_type == stype,
+                Star.star_column_id.in_(star_col_ids)).count()
+    if total == 0:
+        return None
+    return round(100 * min(filled, total) / total)
 
 
 # --------------------------------------------------------------------------- #
@@ -318,10 +380,18 @@ def remove_student(enrollment_id):
     enr = db.session.get(Enrollment, enrollment_id) or abort(404)
     klass = get_class_or_403(enr.class_id)
     student = enr.student
-    db.session.delete(enr)
-    # Supprime l'étudiant s'il n'est plus inscrit nulle part.
-    if student and len(student.enrollments) <= 1:
+
+    # Purge les étoiles/notes/liens de l'étudiant dans les modules de cette classe.
+    star_ids, url_ids, note_ids = _class_column_ids(klass)
+    purge_subject_data(SUBJECT_STUDENT, student.id, star_ids, url_ids, note_ids)
+
+    if len(student.enrollments) <= 1:
+        # Dernier rattachement : purge résiduelle puis suppression de l'étudiant
+        # (la suppression de l'étudiant supprime l'inscription en cascade).
+        purge_subject_data(SUBJECT_STUDENT, student.id)
         db.session.delete(student)
+    else:
+        db.session.delete(enr)
     db.session.commit()
     flash("Étudiant retiré de la classe.", "success")
     return redirect(url_for("main.view_class", class_id=klass.id))

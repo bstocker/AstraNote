@@ -6,6 +6,7 @@
   <div class="panel" style="flex:1;">
     <h2>Écoles</h2>
     <form method="post" action="{{ url_for('main.schools') }}" class="inline-form">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div><label>Nom de l'école</label><input type="text" name="name" placeholder="EPSI" required></div>
       <div style="flex:0 0 auto;"><button class="btn" type="submit">Ajouter</button></div>
     </form>
@@ -22,6 +23,7 @@
             {% if current_user.is_admin or s.teacher_id == current_user.id %}
             <form method="post" action="{{ url_for('main.delete_school', school_id=s.id) }}"
                   onsubmit="return confirm('Supprimer cette école et tout son contenu ?');" style="display:inline;">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button class="btn danger small" type="submit">Supprimer</button>
             </form>
             {% endif %}
@@ -35,6 +37,7 @@
   <div class="panel" style="flex:1;">
     <h2>Années académiques</h2>
     <form method="post" action="{{ url_for('main.create_year') }}" class="inline-form">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div><label>Libellé</label><input type="text" name="label" placeholder="2025-2026" required></div>
       <div style="flex:0 0 auto;"><button class="btn" type="submit">Ajouter</button></div>
     </form>
@@ -51,6 +54,7 @@
             {% if current_user.is_admin or y.teacher_id == current_user.id %}
             <form method="post" action="{{ url_for('main.delete_year', year_id=y.id) }}"
                   onsubmit="return confirm('Supprimer cette année et tout son contenu ?');" style="display:inline;">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button class="btn danger small" type="submit">Supprimer</button>
             </form>
             {% endif %}

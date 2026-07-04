@@ -18,10 +18,12 @@
     "-": "grey", "?": "grey",
   };
 
+  const CSRF = (document.querySelector('meta[name="csrf-token"]') || {}).content || "";
+
   async function postJSON(url, payload) {
     const res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF },
       body: JSON.stringify(payload),
     });
     if (!res.ok) {
@@ -72,6 +74,27 @@
         refreshGrades(data.grades);
         flash(cell, true);
       } catch (e) { flash(cell, false); alert(e.message); }
+    });
+
+    // Saisie clavier rapide : taper 0–4 fixe la valeur ; Entrée descend d'une ligne.
+    const cell = sel.closest(".star-cell");
+    sel.addEventListener("focus", () => cell.classList.add("kb-focus"));
+    sel.addEventListener("blur", () => cell.classList.remove("kb-focus"));
+    sel.addEventListener("keydown", (e) => {
+      if (/^[0-4]$/.test(e.key)) {
+        e.preventDefault();
+        if (sel.value !== e.key) {
+          sel.value = e.key;
+          sel.dispatchEvent(new Event("change"));
+        }
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        const col = cell.dataset.column;
+        const all = Array.from(grid.querySelectorAll(
+          `.star-cell[data-column="${col}"] .star-select`));
+        const next = all[all.indexOf(sel) + 1];
+        if (next) next.focus();
+      }
     });
   });
 
@@ -139,6 +162,9 @@
       const inp = document.createElement("input");
       inp.name = "title"; inp.value = title;
       f.appendChild(inp);
+      const csrf = document.createElement("input");
+      csrf.name = "csrf_token"; csrf.value = CSRF;
+      f.appendChild(csrf);
       document.body.appendChild(f);
       f.submit();
     });

@@ -62,16 +62,43 @@ astranote/
   static/              CSS + JS de la grille
 ```
 
+## Tests
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest -q
+```
+
+La suite couvre l'authentification/CSRF, le prorata (R1–R10), la neutralisation,
+le périmètre écoles/années, le nettoyage des orphelins, le renommage/réordonnancement
+des colonnes, l'édition de module et l'export/import Excel.
+
 ## Déploiement (PythonAnywhere)
 
-Le workflow `.github/workflows/CICD.yml` uploade le code sur PythonAnywhere à
-chaque push sur `main` et recharge la webapp. Il **exclut** la base SQLite et le
-dossier `instance/` pour ne pas écraser les données de production.
+Le workflow `.github/workflows/CICD.yml` lance d'abord les **tests** (job `test`)
+puis, seulement s'ils passent, uploade le code sur PythonAnywhere et recharge la
+webapp. Il **exclut** la base SQLite et le dossier `instance/` pour ne pas
+écraser les données de production.
 
 Secrets GitHub requis : `PA_USERNAME`, `PA_TOKEN`, `PA_TARGET_DIR`,
 `PA_WEBAPP_DOMAIN` (et `PA_HOST` si compte EU). Sur PythonAnywhere, pointez le
 fichier WSGI vers `wsgi.py` (variable `application`) et définissez
 `ASTRANOTE_SECRET_KEY`.
+
+> ⚠️ Le déploiement copie les fichiers mais **n'installe pas** les dépendances.
+> Après un changement de `requirements.txt` (ex. ajout de Flask-WTF), lancez une
+> fois dans une console PythonAnywhere : `pip install --user -r <TARGET_DIR>/requirements.txt`,
+> puis **Reload**. Vous pouvez aussi en faire une tâche planifiée (onglet *Tasks*).
+
+## Sauvegarde de la base
+
+`scripts/backup_db.py` crée une copie horodatée de la base SQLite (via l'API
+`backup` de SQLite, cohérente même en écriture) et conserve les 14 dernières.
+À planifier en tâche quotidienne sur PythonAnywhere :
+
+```bash
+python3 /home/astranote/mysite/scripts/backup_db.py
+```
 
 ## Roadmap (v2, cf. fiche §8)
 

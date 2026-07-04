@@ -182,6 +182,7 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
 - **Sélecteur d'année académique** en tête : l'enseignant choisit l'année, et le tableau de bord affiche alors les **écoles**, et **sous chaque école ses classes** de l'année sélectionnée.
 - Par défaut, l'année la plus récente est présélectionnée.
 - Chaque classe est cliquable et donne accès à ses modules.
+- **Avancement de la saisie** : chaque classe affiche une barre indiquant le pourcentage de cellules d'étoiles remplies (sur l'ensemble de ses modules).
 - Périmètre respectant les droits (l'enseignant ne voit que ses classes et ses écoles/années plus les communes).
 
 ### 5.10 Recherche d'étudiant
@@ -224,7 +225,7 @@ L'**unité notée** (`subject`) est l'étudiant en mode individuel, le groupe en
 - **Backend** : Python 3 + **Flask**, SQLAlchemy (ORM).
 - **Base de données** : **SQLite** (fichier unique, simple à sauvegarder).
 - **Frontend** : templates Jinja2 + JavaScript léger (ou HTMX) pour la grille de saisie.
-- **Auth** : Flask-Login + Werkzeug (hash de mots de passe).
+- **Auth & sécurité** : Flask-Login + Werkzeug (hash de mots de passe) ; **Flask-WTF** (protection CSRF de tous les formulaires et des appels AJAX).
 - **Export** : openpyxl (Excel/CSV).
 
 Contraintes PythonAnywhere prises en compte : une seule base SQLite, pas de service de fond permanent requis, dépendances minimales.

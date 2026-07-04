@@ -4,6 +4,7 @@
 <h1>Nouvelle classe</h1>
 <div class="panel" style="max-width:560px;">
   <form method="post">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>Nom de la classe / promotion</label>
     <input type="text" name="name" placeholder="B3 ASRBD" required>
     <div class="row">
