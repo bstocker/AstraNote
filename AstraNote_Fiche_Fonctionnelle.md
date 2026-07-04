@@ -171,6 +171,7 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
 - Saisie manuelle des notes dans les colonnes « Note CC », « Note Examen », etc.
 - Plusieurs colonnes de note par module/classe.
 - Ces notes sont indépendantes du calcul d'étoiles (aucune pondération automatique).
+- **Suivi de la transmission des notes** : pour chaque module, l'enseignant précise si les notes ont été **envoyées à l'établissement**, à quelle **date** et par quel **moyen** (mail, outil institutionnel de l'école, autre), avec une précision libre optionnelle. Le statut est affiché sur la page du module et sur la carte du module dans la classe.
 
 ### 5.8 Export / import Excel des notes
 - **Export** d'un module en `.xlsx` contenant le **nom du module**, le **nom de l'étudiant** (ou du groupe), ses **notes manuelles** (colonnes jaunes) et son **commentaire**.
@@ -200,7 +201,8 @@ School(id, name, teacher_id)                  # teacher_id = propriétaire ; NUL
 AcademicYear(id, label, teacher_id)           # ex. "2025-2026" ; NULL = année commune (admin)
 Teacher(id, name, email, password_hash, role) # role = admin | teacher
 Class(id, name, school_id, academic_year_id, teacher_id)
-Module(id, name, discord_url, class_id, work_mode)  # work_mode = individual | group ; discord_url = lien Discord cliquable
+Module(id, name, discord_url, class_id, work_mode,          # work_mode = individual | group
+       notes_sent, notes_sent_date, notes_sent_method, notes_sent_detail)  # transmission des notes à l'établissement
 GradeDate(id, module_id, label, date, position)      # une date/séance
 StarColumn(id, grade_date_id, title, position)        # colonne d'étoiles ; title = titre de l'exercice
 UrlColumn(id, grade_date_id, title, position)         # colonne de liens rattachée à une date

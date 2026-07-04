@@ -235,6 +235,32 @@ def test_import_rejects_out_of_range(app, admin):
 # --------------------------------------------------------------------------- #
 # Tableau de bord : avancement de saisie
 # --------------------------------------------------------------------------- #
+def test_notes_sent_tracking(app, admin):
+    _, mid, _, _ = bootstrap_class(app, admin)
+    # Marque comme envoyées par mail à une date donnée.
+    admin.post(f"/modules/{mid}/notes-sent", data={
+        "notes_sent": "on", "notes_sent_date": "2026-07-01",
+        "notes_sent_method": "mail", "notes_sent_detail": "au secrétariat",
+    })
+    with app.app_context():
+        m = db.session.get(Module, mid)
+        assert m.notes_sent is True
+        assert m.notes_sent_date.isoformat() == "2026-07-01"
+        assert m.notes_sent_method == "mail"
+        assert m.notes_sent_detail == "au secrétariat"
+    assert "Notes envoyées" in admin.get(f"/modules/{mid}").get_data(as_text=True)
+    # Décoche : tout est réinitialisé.
+    admin.post(f"/modules/{mid}/notes-sent", data={})
+    with app.app_context():
+        m = db.session.get(Module, mid)
+        assert m.notes_sent is False and m.notes_sent_date is None
+        assert m.notes_sent_method is None
+    # Moyen invalide ignoré.
+    admin.post(f"/modules/{mid}/notes-sent", data={"notes_sent": "on", "notes_sent_method": "pigeon"})
+    with app.app_context():
+        assert db.session.get(Module, mid).notes_sent_method is None
+
+
 def test_dashboard_progress(app, admin):
     cid, mid, ids, enr = bootstrap_class(app, admin)
     _, scid = add_star_column(app, admin, mid)

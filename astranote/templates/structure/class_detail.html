@@ -30,6 +30,10 @@
           {{ m.grade_dates|length }} date(s)
           {% if m.discord_url %} · 💬 Discord{% endif %}
         </div>
+        <div class="meta">
+          {% if m.notes_sent %}<span style="color:#16a34a;">✔ Notes envoyées{% if m.notes_sent_date %} le {{ m.notes_sent_date.strftime('%d/%m/%Y') }}{% endif %}</span>
+          {% else %}<span style="color:#94a3b8;">Notes non envoyées</span>{% endif %}
+        </div>
       </a>
       {% endfor %}
     </div>

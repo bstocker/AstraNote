@@ -76,6 +76,11 @@ class Module(db.Model):
     discord_url = db.Column(db.String(500))  # lien vers le salon Discord (cliquable)
     class_id = db.Column(db.Integer, db.ForeignKey("class.id"), nullable=False)
     work_mode = db.Column(db.String(20), nullable=False, default=WORK_MODE_INDIVIDUAL)
+    # Suivi de la transmission des notes à l'établissement.
+    notes_sent = db.Column(db.Boolean, nullable=False, default=False)
+    notes_sent_date = db.Column(db.Date)
+    notes_sent_method = db.Column(db.String(20))   # mail | institutional | other
+    notes_sent_detail = db.Column(db.String(200))  # précision libre (outil, remarque)
 
     grade_dates = db.relationship(
         "GradeDate", backref="module", cascade="all, delete-orphan",

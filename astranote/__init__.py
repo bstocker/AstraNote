@@ -85,6 +85,11 @@ def _run_migrations(app):
     add_column_if_missing("student", "active", "BOOLEAN NOT NULL DEFAULT 1")
     # Évolution : lien Discord cliquable sur un module.
     add_column_if_missing("module", "discord_url", "VARCHAR(500)")
+    # Évolution : suivi de l'envoi des notes à l'établissement.
+    add_column_if_missing("module", "notes_sent", "BOOLEAN NOT NULL DEFAULT 0")
+    add_column_if_missing("module", "notes_sent_date", "DATE")
+    add_column_if_missing("module", "notes_sent_method", "VARCHAR(20)")
+    add_column_if_missing("module", "notes_sent_detail", "VARCHAR(200)")
 
 
 def _ensure_admin(app):

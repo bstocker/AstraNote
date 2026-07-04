@@ -23,6 +23,19 @@ from .main import get_class_or_403, purge_subject_data
 
 modules_bp = Blueprint("modules", __name__)
 
+# Moyens de transmission des notes à l'établissement (valeur -> libellé).
+NOTES_METHODS = {
+    "mail": "Mail",
+    "institutional": "Outil institutionnel de l'école",
+    "other": "Autre",
+}
+
+
+@modules_bp.app_context_processor
+def _inject_notes_methods():
+    """Rend NOTES_METHODS disponible dans tous les templates."""
+    return {"notes_methods": NOTES_METHODS}
+
 
 # --------------------------------------------------------------------------- #
 # Helpers
@@ -105,6 +118,39 @@ def edit_module(module_id):
     module.discord_url = request.form.get("discord_url", "").strip() or None
     db.session.commit()
     flash("Module mis à jour.", "success")
+    return redirect(url_for("modules.view_module", module_id=module.id))
+
+
+@modules_bp.route("/modules/<int:module_id>/notes-sent", methods=["POST"])
+@login_required
+def set_notes_sent(module_id):
+    """Enregistre si/quand/comment les notes du module ont été envoyées à
+    l'établissement (fiche §5.7)."""
+    from datetime import datetime
+
+    module = get_module_or_403(module_id)
+    sent = "notes_sent" in request.form
+    module.notes_sent = sent
+
+    if sent:
+        raw = request.form.get("notes_sent_date", "").strip()
+        parsed = None
+        if raw:
+            try:
+                parsed = datetime.strptime(raw, "%Y-%m-%d").date()
+            except ValueError:
+                parsed = None
+        method = request.form.get("notes_sent_method", "").strip()
+        module.notes_sent_date = parsed
+        module.notes_sent_method = method if method in NOTES_METHODS else None
+        module.notes_sent_detail = request.form.get("notes_sent_detail", "").strip() or None
+    else:
+        module.notes_sent_date = None
+        module.notes_sent_method = None
+        module.notes_sent_detail = None
+
+    db.session.commit()
+    flash("Statut d'envoi des notes mis à jour.", "success")
     return redirect(url_for("modules.view_module", module_id=module.id))
 
 

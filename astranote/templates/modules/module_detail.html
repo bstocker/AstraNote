@@ -20,6 +20,14 @@
         <a href="{{ module.discord_url }}" target="_blank" rel="noopener">💬 Discord ↗</a>
       {% endif %}
     </p>
+    <p style="margin:4px 0 0;">
+      {% if module.notes_sent %}
+        <span class="badge sent">✔ Notes envoyées{% if module.notes_sent_date %} le {{ module.notes_sent_date.strftime('%d/%m/%Y') }}{% endif %}{% if module.notes_sent_method %} · {{ notes_methods[module.notes_sent_method] }}{% endif %}</span>
+        {% if module.notes_sent_detail %}<span class="muted" style="font-size:12px;">({{ module.notes_sent_detail }})</span>{% endif %}
+      {% else %}
+        <span class="badge neutral">Notes non envoyées à l'établissement</span>
+      {% endif %}
+    </p>
   </div>
   <form method="post" action="{{ url_for('modules.delete_module', module_id=module.id) }}"
         onsubmit="return confirm('Supprimer ce module ?');">
@@ -38,6 +46,36 @@
       <label>Lien Discord (URL)</label>
       <input type="url" name="discord_url" value="{{ module.discord_url or '' }}" placeholder="https://discord.com/channels/…">
       <p class="help">Le mode de travail ({{ 'groupe' if module.is_group_mode else 'individuel' }}) n'est pas modifiable après création.</p>
+      <div style="margin-top:12px;">
+        <button class="btn" type="submit">Enregistrer</button>
+      </div>
+    </form>
+  </div>
+</details>
+
+<details class="tool"{% if request.args.get('envoi') %} open{% endif %}>
+  <summary>📤 Envoi des notes à l'établissement</summary>
+  <div class="panel" style="max-width:620px;">
+    <form method="post" action="{{ url_for('modules.set_notes_sent', module_id=module.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label style="display:flex; align-items:center; gap:8px; font-size:14px; color:var(--ink);">
+        <input type="checkbox" name="notes_sent" value="on" style="width:auto;" {{ 'checked' if module.notes_sent }}>
+        Notes envoyées à l'établissement
+      </label>
+      <div class="row">
+        <div><label>Date d'envoi</label>
+          <input type="date" name="notes_sent_date" value="{{ module.notes_sent_date.isoformat() if module.notes_sent_date else '' }}"></div>
+        <div><label>Moyen</label>
+          <select name="notes_sent_method">
+            <option value="">—</option>
+            {% for val, lbl in notes_methods.items() %}
+              <option value="{{ val }}" {{ 'selected' if module.notes_sent_method == val else '' }}>{{ lbl }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <label>Précision (opt.)</label>
+      <input type="text" name="notes_sent_detail" value="{{ module.notes_sent_detail or '' }}" placeholder="Nom de l'outil, destinataire, remarque…">
       <div style="margin-top:12px;">
         <button class="btn" type="submit">Enregistrer</button>
       </div>
