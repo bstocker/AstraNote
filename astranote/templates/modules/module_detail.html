@@ -16,10 +16,8 @@
     </h1>
     <p class="muted">
       {{ klass.school.name }} · {{ klass.academic_year.label }}
-      {% if module.discord_channel or module.discord_url %} ·
-        {% if module.discord_url %}
-          <a href="{{ module.discord_url }}" target="_blank" rel="noopener">💬 {{ module.discord_channel or 'Discord' }} ↗</a>
-        {% else %}#{{ module.discord_channel }}{% endif %}
+      {% if module.discord_url %} ·
+        <a href="{{ module.discord_url }}" target="_blank" rel="noopener">💬 Discord ↗</a>
       {% endif %}
     </p>
   </div>
@@ -35,12 +33,8 @@
     <form method="post" action="{{ url_for('modules.edit_module', module_id=module.id) }}">
       <label>Nom du module</label>
       <input type="text" name="name" value="{{ module.name }}" required>
-      <div class="row">
-        <div><label>Salon Discord (nom)</label>
-          <input type="text" name="discord_channel" value="{{ module.discord_channel or '' }}" placeholder="crypto-b3"></div>
-        <div><label>Lien Discord (URL)</label>
-          <input type="url" name="discord_url" value="{{ module.discord_url or '' }}" placeholder="https://discord.com/channels/…"></div>
-      </div>
+      <label>Lien Discord (URL)</label>
+      <input type="url" name="discord_url" value="{{ module.discord_url or '' }}" placeholder="https://discord.com/channels/…">
       <p class="help">Le mode de travail ({{ 'groupe' if module.is_group_mode else 'individuel' }}) n'est pas modifiable après création.</p>
       <div style="margin-top:12px;">
         <button class="btn" type="submit">Enregistrer</button>
