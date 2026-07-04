@@ -172,8 +172,11 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
 - Plusieurs colonnes de note par module/classe.
 - Ces notes sont indépendantes du calcul d'étoiles (aucune pondération automatique).
 
-### 5.8 Export *(optionnel, v2)*
-- Export d'un module en `.xlsx` / `.csv` (étoiles, note d'étoiles, notes manuelles).
+### 5.8 Export / import Excel des notes
+- **Export** d'un module en `.xlsx` contenant le **nom du module**, le **nom de l'étudiant** (ou du groupe), ses **notes manuelles** (colonnes jaunes) et son **commentaire**.
+- **Import** du même fichier après édition dans Excel : les notes manuelles et commentaires sont **mis à jour**. Le rapprochement se fait sur une colonne `ID` masquée ; les colonnes de note sont reconnues par leur intitulé.
+- Contrôles à l'import : notes bornées à 0–20 (valeurs invalides signalées et ignorées), étudiants neutralisés exclus, fichier non conforme rejeté.
+- Les étoiles ne sont pas concernées par cet import (elles se saisissent dans la grille).
 
 ### 5.9 Tableau de bord
 - **Sélecteur d'année académique** en tête : l'enseignant choisit l'année, et le tableau de bord affiche alors les **écoles**, et **sous chaque école ses classes** de l'année sélectionnée.

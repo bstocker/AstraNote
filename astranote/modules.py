@@ -4,8 +4,12 @@ C'est le cœur de l'application (fiche §5.3 à §5.7). La vue module affiche un
 tableau unique de consultation + saisie ; les étoiles / notes / URL sont
 enregistrées immédiatement via des endpoints AJAX avec recalcul du prorata.
 """
+from io import BytesIO
+import re
+
 from flask import (
     Blueprint, render_template, redirect, url_for, request, flash, abort, jsonify,
+    send_file,
 )
 from flask_login import login_required, current_user
 
@@ -520,3 +524,208 @@ def save_comment(module_id):
         enr.general_comment = comment
     db.session.commit()
     return jsonify(ok=True)
+
+
+# --------------------------------------------------------------------------- #
+# Export / import Excel des notes manuelles (colonnes jaunes) + commentaire
+# --------------------------------------------------------------------------- #
+def _safe_sheet_title(name):
+    """Titre d'onglet valide pour Excel (max 31 car., pas de []:*?/\\)."""
+    title = re.sub(r"[\[\]:\*\?/\\]", " ", name or "Notes").strip()
+    return (title or "Notes")[:31]
+
+
+def _export_subjects(module):
+    """Sujets exportables : étudiants actifs (individuel) ou groupes."""
+    return [s for s in module_subjects(module) if s.get("active", True)]
+
+
+def _set_comment(module, subject_id, comment):
+    if module.is_group_mode:
+        group = db.session.get(Group, subject_id)
+        if group and group.module_id == module.id:
+            group.comment = comment
+    else:
+        enr = Enrollment.query.filter_by(
+            student_id=subject_id, class_id=module.class_id,
+        ).first()
+        if enr:
+            enr.general_comment = comment
+
+
+@modules_bp.route("/modules/<int:module_id>/export.xlsx")
+@login_required
+def export_module(module_id):
+    """Exporte un module en .xlsx : nom du module, nom de l'étudiant/groupe,
+    ses notes manuelles (colonnes jaunes) et son commentaire."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    module = get_module_or_403(module_id)
+    subjects = _export_subjects(module)
+    note_cols = module.note_columns
+    subject_type = _subject_type(module)
+
+    note_map = {}
+    if note_cols:
+        for n in NoteValue.query.filter(
+            NoteValue.subject_type == subject_type,
+            NoteValue.note_column_id.in_([c.id for c in note_cols])).all():
+            note_map[(n.subject_id, n.note_column_id)] = n.score
+    comment_by_id = {s["id"]: s.get("comment") for s in subjects}
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = _safe_sheet_title(module.name)
+
+    yellow = PatternFill("solid", fgColor="FEF9C3")
+    grey = PatternFill("solid", fgColor="F1F5F9")
+    bold = Font(bold=True)
+
+    # Ligne 1 : nom du module.
+    ws["B1"] = f"Module : {module.name}"
+    ws["B1"].font = Font(bold=True, size=13)
+
+    # Ligne 2 : en-têtes.
+    label_head = "Groupe" if module.is_group_mode else "Étudiant"
+    headers = ["ID", label_head] + [c.title for c in note_cols] + ["Commentaire"]
+    for col_idx, title in enumerate(headers, start=1):
+        cell = ws.cell(row=2, column=col_idx, value=title)
+        cell.font = bold
+        if 3 <= col_idx <= 2 + len(note_cols):   # colonnes de note = jaune
+            cell.fill = yellow
+        elif col_idx <= 2:
+            cell.fill = grey
+
+    # Données.
+    for r, subj in enumerate(subjects, start=3):
+        ws.cell(row=r, column=1, value=subj["id"])
+        ws.cell(row=r, column=2, value=subj["label"]).font = bold
+        for j, nc in enumerate(note_cols, start=3):
+            v = note_map.get((subj["id"], nc.id))
+            c = ws.cell(row=r, column=j, value=v)
+            c.fill = yellow
+        ws.cell(row=r, column=3 + len(note_cols),
+                value=comment_by_id.get(subj["id"]))
+
+    # Mise en forme : colonne ID masquée (ne pas éditer), largeurs, gel.
+    ws.column_dimensions["A"].hidden = True
+    ws.column_dimensions["B"].width = 26
+    for j in range(3, 3 + len(note_cols)):
+        ws.column_dimensions[ws.cell(row=2, column=j).column_letter].width = 14
+    ws.column_dimensions[ws.cell(row=2, column=3 + len(note_cols)).column_letter].width = 40
+    ws.freeze_panes = "C3"
+
+    bio = BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+    filename = re.sub(r"[^\w\-]+", "_", module.name).strip("_") or "module"
+    return send_file(
+        bio, as_attachment=True, download_name=f"notes_{filename}.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@modules_bp.route("/modules/<int:module_id>/import", methods=["POST"])
+@login_required
+def import_module(module_id):
+    """Réimporte un fichier .xlsx exporté : met à jour les notes manuelles et
+    les commentaires. Le matching se fait par la colonne ID ; les colonnes de
+    note sont reconnues par leur intitulé."""
+    from openpyxl import load_workbook
+
+    module = get_module_or_403(module_id)
+    file = request.files.get("file")
+    if not file or not file.filename.lower().endswith(".xlsx"):
+        flash("Veuillez fournir un fichier .xlsx (exporté depuis ce module).", "error")
+        return redirect(url_for("modules.view_module", module_id=module.id))
+
+    try:
+        wb = load_workbook(file, data_only=True)
+    except Exception:
+        flash("Fichier Excel illisible.", "error")
+        return redirect(url_for("modules.view_module", module_id=module.id))
+    ws = wb.active
+
+    rows = list(ws.iter_rows())
+    # Repère la ligne d'en-tête (celle contenant "ID").
+    header_row_idx = None
+    for i, row in enumerate(rows):
+        values = [(c.value if c.value is not None else "") for c in row]
+        if any(str(v).strip().lower() == "id" for v in values):
+            header_row_idx = i
+            headers = [str(v).strip() for v in values]
+            break
+    if header_row_idx is None:
+        flash("En-tête introuvable : utilisez un fichier exporté depuis ce module.", "error")
+        return redirect(url_for("modules.view_module", module_id=module.id))
+
+    # Index des colonnes.
+    id_col = next(i for i, h in enumerate(headers) if h.lower() == "id")
+    comment_col = next((i for i, h in enumerate(headers) if h.lower() == "commentaire"), None)
+    note_by_title = {c.title: c for c in module.note_columns}
+    note_cols_pos = {i: note_by_title[h] for i, h in enumerate(headers) if h in note_by_title}
+
+    subject_type = _subject_type(module)
+    valid_ids = {s["id"] for s in _export_subjects(module)}
+    existing = {
+        (nv.subject_id, nv.note_column_id): nv
+        for nv in NoteValue.query.filter(
+            NoteValue.subject_type == subject_type,
+            NoteValue.note_column_id.in_([c.id for c in module.note_columns] or [0])).all()
+    }
+
+    n_notes, n_comments, errors = 0, 0, []
+    for row in rows[header_row_idx + 1:]:
+        cells = list(row)
+        raw_id = cells[id_col].value if id_col < len(cells) else None
+        if raw_id in (None, ""):
+            continue
+        try:
+            sid = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+        if sid not in valid_ids:
+            continue
+
+        # Notes manuelles.
+        for pos, nc in note_cols_pos.items():
+            if pos >= len(cells):
+                continue
+            val = cells[pos].value
+            score = None
+            if val not in (None, ""):
+                try:
+                    score = float(str(val).replace(",", "."))
+                except ValueError:
+                    errors.append(f"« {nc.title} » ligne ID {sid} : valeur non numérique")
+                    continue
+                if not (0 <= score <= 20):
+                    errors.append(f"« {nc.title} » ligne ID {sid} : hors 0–20")
+                    continue
+            nv = existing.get((sid, nc.id))
+            if nv:
+                nv.score = score
+            else:
+                db.session.add(NoteValue(
+                    subject_type=subject_type, subject_id=sid,
+                    note_column_id=nc.id, score=score,
+                ))
+            n_notes += 1
+
+        # Commentaire.
+        if comment_col is not None and comment_col < len(cells):
+            cval = cells[comment_col].value
+            _set_comment(module, sid, (str(cval).strip() if cval not in (None, "") else None))
+            n_comments += 1
+
+    db.session.commit()
+    msg = f"Import terminé : {n_notes} note(s) et {n_comments} commentaire(s) mis à jour."
+    if errors:
+        msg += " Ignoré(s) : " + " ; ".join(errors[:5])
+        if len(errors) > 5:
+            msg += f" … (+{len(errors) - 5})"
+        flash(msg, "error")
+    else:
+        flash(msg, "success")
+    return redirect(url_for("modules.view_module", module_id=module.id))

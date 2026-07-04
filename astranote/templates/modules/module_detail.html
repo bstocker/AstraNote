@@ -200,6 +200,16 @@
       <div><label>Intitulé</label><input type="text" name="title" placeholder="Note CC" required></div>
       <div style="flex:0 0 auto;"><button class="btn" type="submit">Ajouter</button></div>
     </form>
+
+    <h2>Notes au format Excel</h2>
+    <p class="help">Exportez les notes manuelles (colonnes jaunes) et commentaires, éditez-les dans Excel, puis réimportez le fichier.</p>
+    <a class="btn secondary small" href="{{ url_for('modules.export_module', module_id=module.id) }}">⬇ Exporter (.xlsx)</a>
+    <form method="post" action="{{ url_for('modules.import_module', module_id=module.id) }}"
+          enctype="multipart/form-data" class="inline-form" style="margin-top:10px;">
+      <div><input type="file" name="file" accept=".xlsx" required></div>
+      <div style="flex:0 0 auto;"><button class="btn small" type="submit">⬆ Importer</button></div>
+    </form>
+    <p class="help">⚠ Ne modifiez pas la colonne « ID » (masquée) ni les intitulés de colonnes du fichier.</p>
   </div>
 </div>
 
