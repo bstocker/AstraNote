@@ -116,12 +116,13 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
 
 ### 5.1 Authentification et comptes
 - Connexion par email / mot de passe (hash sécurisé via Werkzeug).
-- Gestion de session (Flask-Login), déconnexion.
+- Gestion de session (Flask-Login), déconnexion. Cookies de session durcis (HttpOnly, SameSite, Secure en HTTPS).
 - Création des comptes enseignants par l'administrateur.
+- **Page « Mon compte »** : chaque utilisateur peut **changer son mot de passe** (vérification du mot de passe actuel, minimum 8 caractères).
 
 ### 5.2 Structure : écoles, années, classes
 - CRUD **écoles**, **années académiques**, **classes**.
-- **Chaque enseignant peut créer ses propres écoles et années** ; il ne voit que les siennes plus les **écoles/années communes** créées par l'administrateur.
+- **Chaque enseignant peut créer, renommer et supprimer ses propres écoles et années** ; il ne voit que les siennes plus les **écoles/années communes** créées par l'administrateur (renommables/supprimables par l'admin seul).
 - Association d'une classe à une école + une année (choisies parmi celles visibles par l'enseignant).
 - Duplication d'une classe d'une année sur l'autre (report de la structure sans les étoiles).
 

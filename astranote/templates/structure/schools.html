@@ -14,7 +14,14 @@
       <tbody>
         {% for s in schools %}
         <tr>
-          <td>{{ s.name }}
+          <td>
+            {% if current_user.is_admin or s.teacher_id == current_user.id %}
+            <form method="post" action="{{ url_for('main.rename_school', school_id=s.id) }}" style="display:inline-flex; gap:4px; align-items:center;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="text" name="name" value="{{ s.name }}" style="width:150px;">
+              <button class="btn secondary small" type="submit" title="Renommer">✎</button>
+            </form>
+            {% else %}{{ s.name }}{% endif %}
             {% if s.teacher_id is none %}<span class="badge" title="Créée par l'administrateur, visible par tous">commune</span>{% endif %}
             {% if current_user.is_admin and s.owner %}<span class="muted" style="font-size:12px;">· {{ s.owner.name }}</span>{% endif %}
           </td>
@@ -45,7 +52,14 @@
       <tbody>
         {% for y in years %}
         <tr>
-          <td>{{ y.label }}
+          <td>
+            {% if current_user.is_admin or y.teacher_id == current_user.id %}
+            <form method="post" action="{{ url_for('main.rename_year', year_id=y.id) }}" style="display:inline-flex; gap:4px; align-items:center;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="text" name="label" value="{{ y.label }}" style="width:110px;">
+              <button class="btn secondary small" type="submit" title="Renommer">✎</button>
+            </form>
+            {% else %}{{ y.label }}{% endif %}
             {% if y.teacher_id is none %}<span class="badge" title="Créée par l'administrateur, visible par tous">commune</span>{% endif %}
             {% if current_user.is_admin and y.owner %}<span class="muted" style="font-size:12px;">· {{ y.owner.name }}</span>{% endif %}
           </td>

@@ -140,6 +140,9 @@ def set_notes_sent(module_id):
                 parsed = datetime.strptime(raw, "%Y-%m-%d").date()
             except ValueError:
                 parsed = None
+        # Si envoyé sans date précisée, on retient la date du jour.
+        if parsed is None:
+            parsed = datetime.today().date()
         method = request.form.get("notes_sent_method", "").strip()
         module.notes_sent_date = parsed
         module.notes_sent_method = method if method in NOTES_METHODS else None

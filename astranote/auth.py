@@ -52,6 +52,28 @@ def logout():
     return redirect(url_for("auth.login"))
 
 
+@auth_bp.route("/account", methods=["GET", "POST"])
+@login_required
+def account():
+    """Page « Mon compte » : changement de mot de passe self-service."""
+    if request.method == "POST":
+        current = request.form.get("current_password", "")
+        new = request.form.get("new_password", "")
+        confirm = request.form.get("confirm_password", "")
+        if not check_password_hash(current_user.password_hash, current):
+            flash("Mot de passe actuel incorrect.", "error")
+        elif len(new) < 8:
+            flash("Le nouveau mot de passe doit contenir au moins 8 caractères.", "error")
+        elif new != confirm:
+            flash("La confirmation ne correspond pas au nouveau mot de passe.", "error")
+        else:
+            current_user.password_hash = generate_password_hash(new)
+            db.session.commit()
+            flash("Mot de passe mis à jour.", "success")
+            return redirect(url_for("auth.account"))
+    return render_template("auth/account.html")
+
+
 @auth_bp.route("/teachers")
 @admin_required
 def teachers():

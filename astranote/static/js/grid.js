@@ -170,3 +170,15 @@
     });
   }
 })();
+
+// Envoi des notes : pré-remplit la date du jour quand on coche « envoyées ».
+(function () {
+  const chk = document.querySelector('input[name="notes_sent"]');
+  const date = document.querySelector('input[name="notes_sent_date"]');
+  if (!chk || !date) return;
+  chk.addEventListener("change", () => {
+    if (chk.checked && !date.value) {
+      date.value = new Date().toISOString().slice(0, 10);
+    }
+  });
+})();

@@ -25,7 +25,7 @@
     <input type="text" name="q" placeholder="Rechercher un étudiant…" value="{{ request.args.get('q','') }}">
     <button type="submit">🔍</button>
   </form>
-  <span class="user">{{ current_user.name }}{% if current_user.is_admin %} · admin{% endif %}</span>
+  <a href="{{ url_for('auth.account') }}" class="user">{{ current_user.name }}{% if current_user.is_admin %} · admin{% endif %}</a>
   <a href="{{ url_for('auth.logout') }}" class="user">Déconnexion</a>
 </header>
 {% endif %}

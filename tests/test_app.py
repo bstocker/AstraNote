@@ -270,6 +270,62 @@ def test_dashboard_shows_notes_sent(app, admin):
     assert "check-sent" in html and "✔" in html
 
 
+def test_notes_sent_defaults_to_today(app, admin):
+    from datetime import date
+    _, mid, _, _ = bootstrap_class(app, admin)
+    admin.post(f"/modules/{mid}/notes-sent", data={"notes_sent": "on"})  # sans date
+    with app.app_context():
+        assert db.session.get(Module, mid).notes_sent_date == date.today()
+
+
+def test_change_password(app, admin):
+    # Mauvais mot de passe actuel -> refusé
+    r = admin.post("/account", data={"current_password": "wrong",
+                                     "new_password": "newpass12", "confirm_password": "newpass12"},
+                   follow_redirects=True)
+    assert "incorrect" in r.get_data(as_text=True)
+    # Trop court -> refusé
+    r = admin.post("/account", data={"current_password": ADMIN_PW,
+                                     "new_password": "court", "confirm_password": "court"},
+                   follow_redirects=True)
+    assert "8 caractères" in r.get_data(as_text=True)
+    # Correct -> le nouveau mot de passe fonctionne
+    admin.post("/account", data={"current_password": ADMIN_PW,
+                                 "new_password": "newpass12", "confirm_password": "newpass12"})
+    c2 = app.test_client()
+    r = c2.post("/login", data={"email": "admin@astranote.local", "password": "newpass12"},
+                follow_redirects=True)
+    assert "Tableau de bord" in r.get_data(as_text=True)
+
+
+def test_rename_school_and_year(app, admin):
+    admin.post("/schools", data={"name": "EPSI"})
+    admin.post("/years", data={"label": "2025-2026"})
+    with app.app_context():
+        sid = School.query.first().id
+        yid = AcademicYear.query.first().id
+    admin.post(f"/schools/{sid}/rename", data={"name": "EPSI Lille"})
+    admin.post(f"/years/{yid}/rename", data={"label": "2026-2027"})
+    with app.app_context():
+        assert db.session.get(School, sid).name == "EPSI Lille"
+        assert db.session.get(AcademicYear, yid).label == "2026-2027"
+
+
+def test_teacher_cannot_rename_common_school(app, admin):
+    admin.post("/schools", data={"name": "Commune"})  # admin => commune (NULL)
+    with app.app_context():
+        sid = School.query.first().id
+    make_teacher(app, "Prof", "p@x.fr")
+    c = app.test_client()
+    login(c, "p@x.fr")
+    assert c.post(f"/schools/{sid}/rename", data={"name": "Pirate"}).status_code == 403
+
+
+def test_secure_cookie_flags(app):
+    assert app.config["SESSION_COOKIE_HTTPONLY"] is True
+    assert app.config["SESSION_COOKIE_SAMESITE"] == "Lax"
+
+
 def test_dashboard_progress(app, admin):
     cid, mid, ids, enr = bootstrap_class(app, admin)
     _, scid = add_star_column(app, admin, mid)

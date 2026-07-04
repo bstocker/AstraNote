@@ -204,6 +204,20 @@ def delete_school(school_id):
     return redirect(url_for("main.schools"))
 
 
+@main_bp.route("/schools/<int:school_id>/rename", methods=["POST"])
+@login_required
+def rename_school(school_id):
+    school = db.session.get(School, school_id) or abort(404)
+    if not can_manage_owned(school):
+        abort(403)
+    name = request.form.get("name", "").strip()
+    if name:
+        school.name = name
+        db.session.commit()
+        flash("École renommée.", "success")
+    return redirect(url_for("main.schools"))
+
+
 @main_bp.route("/years", methods=["POST"])
 @login_required
 def create_year():
@@ -212,6 +226,20 @@ def create_year():
         db.session.add(AcademicYear(label=label, teacher_id=_owner_id_for_new()))
         db.session.commit()
         flash("Année académique ajoutée.", "success")
+    return redirect(url_for("main.schools"))
+
+
+@main_bp.route("/years/<int:year_id>/rename", methods=["POST"])
+@login_required
+def rename_year(year_id):
+    year = db.session.get(AcademicYear, year_id) or abort(404)
+    if not can_manage_owned(year):
+        abort(403)
+    label = request.form.get("label", "").strip()
+    if label:
+        year.label = label
+        db.session.commit()
+        flash("Année renommée.", "success")
     return redirect(url_for("main.schools"))
 
 

@@ -20,6 +20,12 @@ class Config:
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
+    # Sécurité des cookies de session. SECURE exige HTTPS ; il est actif par
+    # défaut (prod) et désactivable en local via ASTRANOTE_COOKIE_SECURE=0.
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = "Lax"
+    SESSION_COOKIE_SECURE = os.environ.get("ASTRANOTE_COOKIE_SECURE", "1") != "0"
+
     # Identifiants du compte administrateur créé au premier démarrage.
     ADMIN_EMAIL = os.environ.get("ASTRANOTE_ADMIN_EMAIL", "admin@astranote.local")
     ADMIN_PASSWORD = os.environ.get("ASTRANOTE_ADMIN_PASSWORD")  # None => généré
