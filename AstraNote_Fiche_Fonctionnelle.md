@@ -95,6 +95,8 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
 
 **R9 — Cas limite.** Si aucun étudiant n'a d'étoile (max = 0), la note d'étoiles s'affiche « N/A » (pas de division par zéro).
 
+**R10 — Étudiant neutralisé.** Un étudiant neutralisé (ayant quitté l'école) est **exclu du calcul du prorata** : il n'entre pas dans le total maximum de référence (R3) et n'obtient pas de note d'étoiles (affichée « — »). Les autres étudiants sont notés au prorata du meilleur total **parmi les étudiants actifs**. Ses étoiles restent conservées ; la neutralisation est réversible.
+
 ---
 
 ## 4. Rôles et droits
@@ -135,6 +137,8 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
 
 ### 5.4 Étudiants
 - Ajout d'étudiants (nom, email `@ecoles-epsi.net`, pseudo Discord).
+- **Modification des caractéristiques** d'un étudiant à tout moment (nom, email, pseudo Discord, lien GitHub). La modification vaut pour toutes ses classes.
+- **Neutralisation** d'un étudiant ayant quitté l'école : il est **grisé** dans les modules et **exclu du calcul du prorata** (il n'est plus la référence 20/20 et ne pénalise plus les autres). Ses étoiles sont **conservées** et l'opération est **réversible** (réactivation).
 - Rattachement à une classe.
 - **Commentaire général** libre par étudiant : appréciation globale saisie par l'enseignant, éditable à tout moment.
 - Champs annexes optionnels : lien GitHub, lien rapport (board.net), URL lab.
@@ -194,7 +198,7 @@ GradeDate(id, module_id, label, date, position)      # une date/séance
 StarColumn(id, grade_date_id, title, position)        # colonne d'étoiles ; title = titre de l'exercice
 UrlColumn(id, grade_date_id, title, position)         # colonne de liens rattachée à une date
 NoteColumn(id, module_id, title, position)            # "Note CC", "Note Examen"... (affichage fond jaune, gras)
-Student(id, full_name, email, discord_alias, github_url)
+Student(id, full_name, email, discord_alias, github_url, active)  # active=False => neutralisé (grisé, hors calcul)
 Enrollment(id, student_id, class_id, general_comment)  # commentaire général de l'enseignant
 Group(id, module_id, name)                            # module en mode groupe
 GroupMember(id, group_id, student_id)

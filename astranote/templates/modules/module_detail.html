@@ -89,8 +89,8 @@
     <tbody>
       {% for subj in subjects %}
         {% set g = grades.get(subj.id, {'total':0,'note':none,'is_reference':false}) %}
-        <tr class="{{ 'reference' if g.is_reference else '' }}">
-          <td class="subject">{{ subj.label }}</td>
+        <tr class="{{ 'reference' if g.is_reference else '' }} {{ 'inactive' if not subj.active else '' }}">
+          <td class="subject">{{ subj.label }}{% if not subj.active %} <span class="badge neutral">neutralisé</span>{% endif %}</td>
           {% for gd in module.grade_dates %}
             {% for sc in gd.star_columns %}
               {% set val = star_map.get((subj.id, sc.id), '0') %}
@@ -119,7 +119,7 @@
           {% endfor %}
           <td class="total" data-total="{{ subj.id }}">{{ g.total }}</td>
           <td class="note20 {{ 'ref' if g.is_reference else '' }}" data-note20="{{ subj.id }}">
-            {{ 'N/A' if g.note is none else g.note }}
+            {% if not subj.active %}—{% else %}{{ 'N/A' if g.note is none else g.note }}{% endif %}
           </td>
           {% for nc in module.note_columns %}
             {% set nval = note_map.get((subj.id, nc.id)) %}

@@ -42,7 +42,7 @@ def module_subjects(module):
         groups = sorted(module.groups, key=lambda g: g.name.lower())
         return [
             {"type": SUBJECT_GROUP, "id": g.id, "label": g.name,
-             "comment": g.comment, "obj": g}
+             "comment": g.comment, "obj": g, "active": True}
             for g in groups
         ]
     enrollments = sorted(
@@ -50,7 +50,8 @@ def module_subjects(module):
     )
     return [
         {"type": SUBJECT_STUDENT, "id": e.student.id, "label": e.student.full_name,
-         "comment": e.general_comment, "obj": e.student, "enrollment": e}
+         "comment": e.general_comment, "obj": e.student, "enrollment": e,
+         "active": e.student.active}
         for e in enrollments
     ]
 
@@ -100,7 +101,8 @@ def view_module(module_id):
     module = get_module_or_403(module_id)
     subjects = module_subjects(module)
     subject_ids = [s["id"] for s in subjects]
-    grades = grading.compute_module_grades(module, subject_ids)
+    active_ids = {s["id"] for s in subjects if s.get("active", True)}
+    grades = grading.compute_module_grades(module, subject_ids, active_ids)
 
     # Index des valeurs pour un accès O(1) dans le template.
     subject_type = SUBJECT_GROUP if module.is_group_mode else SUBJECT_STUDENT
@@ -338,11 +340,15 @@ def _subject_type(module):
 def _grade_payload(module):
     """Renvoie totaux + notes /20 recalculés pour tout le module."""
     subjects = module_subjects(module)
-    grades = grading.compute_module_grades(module, [s["id"] for s in subjects])
+    subject_ids = [s["id"] for s in subjects]
+    active_ids = {s["id"] for s in subjects if s.get("active", True)}
+    grades = grading.compute_module_grades(module, subject_ids, active_ids)
     return {
         str(sid): {
             "total": g["total"],
-            "note": ("N/A" if g["note"] is None else g["note"]),
+            # "—" pour un sujet neutralisé, "N/A" si personne n'a d'étoile.
+            "note": ("—" if not g["active"] else
+                     ("N/A" if g["note"] is None else g["note"])),
             "is_reference": g["is_reference"],
         }
         for sid, g in grades.items()

@@ -255,6 +255,52 @@ def add_student(class_id):
     return redirect(url_for("main.view_class", class_id=class_id))
 
 
+@main_bp.route("/enrollments/<int:enrollment_id>/student", methods=["POST"])
+@login_required
+def edit_student(enrollment_id):
+    """Modifie les caractéristiques de l'étudiant (nom, email, Discord, GitHub).
+
+    Ces champs sont propres à l'étudiant : la modification vaut pour toutes ses
+    classes. L'accès est contrôlé via l'inscription (donc via la classe).
+    """
+    enr = db.session.get(Enrollment, enrollment_id) or abort(404)
+    get_class_or_403(enr.class_id)
+    student = enr.student
+
+    full_name = request.form.get("full_name", "").strip()
+    if not full_name:
+        flash("Le nom de l'étudiant est requis.", "error")
+        return redirect(url_for("main.view_class", class_id=enr.class_id))
+
+    student.full_name = full_name
+    student.email = request.form.get("email", "").strip() or None
+    student.discord_alias = request.form.get("discord_alias", "").strip() or None
+    student.github_url = request.form.get("github_url", "").strip() or None
+    db.session.commit()
+    flash("Étudiant mis à jour.", "success")
+    return redirect(url_for("main.view_class", class_id=enr.class_id))
+
+
+@main_bp.route("/enrollments/<int:enrollment_id>/toggle-active", methods=["POST"])
+@login_required
+def toggle_student_active(enrollment_id):
+    """Neutralise / réactive un étudiant (a quitté l'école).
+
+    Neutralisé : grisé dans les modules et exclu du calcul du prorata. Ses
+    étoiles sont conservées ; l'opération est réversible.
+    """
+    enr = db.session.get(Enrollment, enrollment_id) or abort(404)
+    get_class_or_403(enr.class_id)
+    student = enr.student
+    student.active = not student.active
+    db.session.commit()
+    flash(
+        "Étudiant neutralisé." if not student.active else "Étudiant réactivé.",
+        "success",
+    )
+    return redirect(url_for("main.view_class", class_id=enr.class_id))
+
+
 @main_bp.route("/enrollments/<int:enrollment_id>/comment", methods=["POST"])
 @login_required
 def update_comment(enrollment_id):

@@ -58,23 +58,48 @@
   <!-- Étudiants -->
   <div class="panel" style="flex:1;">
     <h2>Étudiants ({{ klass.enrollments|length }})</h2>
-    <table class="list-table">
-      <thead><tr><th>Nom</th><th>Discord</th><th></th></tr></thead>
-      <tbody>
-        {% for e in klass.enrollments|sort(attribute='student.full_name') %}
-        <tr>
-          <td>{{ e.student.full_name }}<br><span class="muted" style="font-size:12px;">{{ e.student.email or '' }}</span></td>
-          <td class="muted">{{ e.student.discord_alias or '—' }}</td>
-          <td style="text-align:right;">
-            <form method="post" action="{{ url_for('main.remove_student', enrollment_id=e.id) }}"
-                  onsubmit="return confirm('Retirer cet étudiant ?');" style="display:inline;">
-              <button class="btn danger small" type="submit">✕</button>
+    {% for e in klass.enrollments|sort(attribute='student.full_name') %}
+      {% set st = e.student %}
+      <div class="student-row {{ 'inactive' if not st.active }}">
+        <div class="flex-between" style="align-items:flex-start;">
+          <div>
+            <strong>{{ st.full_name }}</strong>
+            {% if not st.active %}<span class="badge neutral">neutralisé</span>{% endif %}
+            <div class="muted" style="font-size:12px;">
+              {{ st.email or '—' }}{% if st.discord_alias %} · {{ st.discord_alias }}{% endif %}
+            </div>
+          </div>
+          <div style="display:flex; gap:6px; flex:0 0 auto;">
+            <form method="post" action="{{ url_for('main.toggle_student_active', enrollment_id=e.id) }}"
+                  title="{{ 'Réintégrer cet étudiant au calcul' if not st.active else 'Neutraliser (a quitté l\'école)' }}">
+              <button class="btn small secondary" type="submit">{{ 'Réactiver' if not st.active else 'Neutraliser' }}</button>
             </form>
-          </td>
-        </tr>
-        {% else %}<tr><td class="muted" colspan="3">Aucun étudiant.</td></tr>{% endfor %}
-      </tbody>
-    </table>
+            <form method="post" action="{{ url_for('main.remove_student', enrollment_id=e.id) }}"
+                  onsubmit="return confirm('Retirer définitivement cet étudiant ?');">
+              <button class="btn danger small" type="submit" title="Retirer de la classe">✕</button>
+            </form>
+          </div>
+        </div>
+        <details class="tool" style="margin-top:4px;">
+          <summary>Éditer</summary>
+          <div>
+            <form method="post" action="{{ url_for('main.edit_student', enrollment_id=e.id) }}">
+              <label>Nom complet</label>
+              <input type="text" name="full_name" value="{{ st.full_name }}" required>
+              <div class="row">
+                <div><label>Email</label><input type="email" name="email" value="{{ st.email or '' }}"></div>
+                <div><label>Pseudo Discord</label><input type="text" name="discord_alias" value="{{ st.discord_alias or '' }}"></div>
+              </div>
+              <label>Lien GitHub</label>
+              <input type="url" name="github_url" value="{{ st.github_url or '' }}">
+              <div style="margin-top:12px;"><button class="btn small" type="submit">Enregistrer</button></div>
+            </form>
+          </div>
+        </details>
+      </div>
+    {% else %}
+      <p class="muted">Aucun étudiant.</p>
+    {% endfor %}
 
     <details class="tool">
       <summary>+ Ajouter un étudiant</summary>

@@ -66,14 +66,21 @@ def _star_column_ids(module):
     return ids
 
 
-def compute_module_grades(module, subject_ids):
+def compute_module_grades(module, subject_ids, active_ids=None):
     """Calcule totaux d'étoiles et notes /20 au prorata pour un module.
 
+    `active_ids` : ensemble des sujets qui **comptent** dans le prorata. Les
+    sujets absents (étudiants neutralisés) conservent leur total mais sont
+    exclus du max de référence et n'obtiennent pas de note (R7bis / neutralisation).
+    Si `active_ids` vaut None, tous les sujets comptent.
+
     Retourne un dict : subject_id -> {"total": int, "note": float|None,
-    "is_reference": bool}. Applique R1, R3, R4, R5, R9 (N/A si max = 0).
+    "is_reference": bool, "active": bool}. Applique R1, R3, R4, R5, R9.
     """
     subject_type = _subject_type_for(module)
     column_ids = _star_column_ids(module)
+    if active_ids is None:
+        active_ids = set(subject_ids)
 
     totals = {sid: 0 for sid in subject_ids}
     if column_ids:
@@ -86,15 +93,20 @@ def compute_module_grades(module, subject_ids):
             if s.subject_id in totals:
                 totals[s.subject_id] += token_points(s.value)
 
-    max_total = max(totals.values()) if totals else 0
+    # Le max de référence ne considère que les sujets actifs (R3).
+    active_totals = [t for sid, t in totals.items() if sid in active_ids]
+    max_total = max(active_totals) if active_totals else 0
 
     result = {}
     for sid, total in totals.items():
-        if max_total <= 0:  # R9 — pas de division par zéro
+        active = sid in active_ids
+        if not active or max_total <= 0:  # neutralisé ou R9 (pas de division par 0)
             note = None
             is_ref = False
         else:
             note = round_half((total / max_total) * 20)
             is_ref = (total == max_total)
-        result[sid] = {"total": total, "note": note, "is_reference": is_ref}
+        result[sid] = {
+            "total": total, "note": note, "is_reference": is_ref, "active": active,
+        }
     return result

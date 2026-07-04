@@ -147,6 +147,9 @@ class Student(db.Model):
     email = db.Column(db.String(160))
     discord_alias = db.Column(db.String(120))
     github_url = db.Column(db.String(300))
+    # Étudiant actif ; False = "neutralisé" (a quitté l'école) : grisé dans les
+    # modules et exclu du calcul du prorata. Ses étoiles restent conservées.
+    active = db.Column(db.Boolean, nullable=False, default=True)
 
     enrollments = db.relationship("Enrollment", backref="student", cascade="all, delete-orphan")
 

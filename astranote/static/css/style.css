@@ -74,6 +74,17 @@ h2 { font-size: 17px; margin: 24px 0 10px; }
   padding: 2px 8px; border-radius: 999px; background: #eef2ff; color: var(--accent-dark);
 }
 .badge.group { background: #ecfdf5; color: #047857; }
+.badge.neutral { background: #f1f5f9; color: #64748b; }
+
+/* Étudiant neutralisé (a quitté l'école) */
+.student-row { border-bottom: 1px solid var(--border); padding: 10px 0; }
+.student-row:last-child { border-bottom: none; }
+.student-row.inactive strong { color: var(--muted); text-decoration: line-through; }
+.student-row.inactive { opacity: .7; }
+table.grid tr.inactive td { background: #f1f5f9; color: var(--grey); }
+table.grid tr.inactive td.subject { color: var(--grey); font-style: italic; }
+table.grid tr.inactive .star-cell .stars,
+table.grid tr.inactive .status-txt { opacity: .5; }
 
 /* Forms & buttons */
 label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin: 10px 0 4px; }

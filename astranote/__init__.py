@@ -78,6 +78,8 @@ def _run_migrations(app):
     # Évolution : écoles / années rattachables à un enseignant propriétaire.
     add_column_if_missing("school", "teacher_id", "INTEGER")
     add_column_if_missing("academic_year", "teacher_id", "INTEGER")
+    # Évolution : neutralisation d'un étudiant (actif par défaut).
+    add_column_if_missing("student", "active", "BOOLEAN NOT NULL DEFAULT 1")
 
 
 def _ensure_admin(app):
