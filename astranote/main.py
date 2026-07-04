@@ -14,6 +14,7 @@ from sqlalchemy import or_
 from .models import (
     db, School, AcademicYear, Class, Module, Student, Enrollment, Teacher,
 )
+from .auth import admin_required
 
 main_bp = Blueprint("main", __name__)
 
@@ -59,11 +60,9 @@ def dashboard():
 # Écoles & années (gérées par l'administrateur — fiche §4)
 # --------------------------------------------------------------------------- #
 @main_bp.route("/schools", methods=["GET", "POST"])
-@login_required
+@admin_required
 def schools():
     if request.method == "POST":
-        if not current_user.is_admin:
-            abort(403)
         name = request.form.get("name", "").strip()
         if name:
             db.session.add(School(name=name))
@@ -77,10 +76,8 @@ def schools():
 
 
 @main_bp.route("/schools/<int:school_id>/delete", methods=["POST"])
-@login_required
+@admin_required
 def delete_school(school_id):
-    if not current_user.is_admin:
-        abort(403)
     school = db.session.get(School, school_id) or abort(404)
     db.session.delete(school)
     db.session.commit()
@@ -89,10 +86,8 @@ def delete_school(school_id):
 
 
 @main_bp.route("/years", methods=["POST"])
-@login_required
+@admin_required
 def create_year():
-    if not current_user.is_admin:
-        abort(403)
     label = request.form.get("label", "").strip()
     if label:
         db.session.add(AcademicYear(label=label))
@@ -102,10 +97,8 @@ def create_year():
 
 
 @main_bp.route("/years/<int:year_id>/delete", methods=["POST"])
-@login_required
+@admin_required
 def delete_year(year_id):
-    if not current_user.is_admin:
-        abort(403)
     year = db.session.get(AcademicYear, year_id) or abort(404)
     db.session.delete(year)
     db.session.commit()
