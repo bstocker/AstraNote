@@ -103,7 +103,7 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
 
 | Rôle | Droits |
 |---|---|
-| **Administrateur** | Gère les comptes enseignants et l'ensemble des écoles/années (dont les **écoles/années communes**) ; accès global à toutes les données. |
+| **Administrateur** | Gère les comptes enseignants et l'ensemble des écoles/années (dont les **écoles/années communes**) ; accès global à toutes les données. Dispose d'une page **Administration** permettant de **télécharger une sauvegarde** de la base en un clic. |
 | **Enseignant** | Crée/gère **ses propres écoles et années académiques**, ses classes, modules, dates, colonnes ; saisit étoiles et notes ; consulte la note d'étoiles calculée. Ne voit que **ses** écoles, années et classes, **plus les écoles/années communes**. |
 
 **Écoles / années propres vs communes.** Une école ou une année créée par un enseignant lui **appartient** : elle n'est visible et modifiable que par lui (et par l'administrateur). Une école ou une année créée par l'**administrateur** est **commune** : visible par tous les enseignants (qui peuvent la réutiliser pour leurs classes) mais modifiable/supprimable uniquement par l'administrateur. Cela évite qu'un même établissement soit ressaisi par chaque enseignant tout en garantissant que chacun gère son propre périmètre.

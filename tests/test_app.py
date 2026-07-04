@@ -3,12 +3,12 @@ from io import BytesIO
 
 from openpyxl import load_workbook
 
-from astranote import grading
+from astranote import create_app, grading
 from astranote.models import (
     db, School, AcademicYear, Class, Module, Student, Enrollment,
     GradeDate, StarColumn, NoteColumn, Group, Star, NoteValue,
 )
-from conftest import make_teacher, login, ADMIN_PW
+from conftest import make_teacher, login, ADMIN_PW, TestConfig
 
 
 # --------------------------------------------------------------------------- #
@@ -364,6 +364,32 @@ def test_teacher_cannot_edit_common_school_billing(app, admin):
 def test_secure_cookie_flags(app):
     assert app.config["SESSION_COOKIE_HTTPONLY"] is True
     assert app.config["SESSION_COOKIE_SAMESITE"] == "Lax"
+
+
+# --------------------------------------------------------------------------- #
+# Administration : sauvegarde de la base
+# --------------------------------------------------------------------------- #
+def test_admin_page_access_control(app, admin):
+    assert admin.get("/admin").status_code == 200
+    make_teacher(app, "Prof", "p@x.fr")
+    c = app.test_client()
+    login(c, "p@x.fr")
+    assert c.get("/admin").status_code == 403
+    assert c.get("/admin/download-db").status_code == 403
+
+
+def test_download_db_returns_sqlite_file(tmp_path):
+    class FileConfig(TestConfig):
+        SQLALCHEMY_DATABASE_URI = f"sqlite:///{tmp_path / 'astranote.db'}"
+
+    a = create_app(FileConfig)
+    c = a.test_client()
+    c.post("/login", data={"email": "admin@astranote.local", "password": ADMIN_PW})
+    r = c.get("/admin/download-db")
+    assert r.status_code == 200
+    # Un fichier SQLite valide commence par cet en-tête.
+    assert r.data[:16] == b"SQLite format 3\x00"
+    assert "attachment" in r.headers.get("Content-Disposition", "")
 
 
 def test_dashboard_progress(app, admin):

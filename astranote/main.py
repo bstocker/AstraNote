@@ -3,10 +3,12 @@
 Cloisonnement des droits (fiche §4) : un enseignant ne voit que *ses* classes ;
 l'administrateur voit toute la base.
 """
+import os
 import unicodedata
 
 from flask import (
     Blueprint, render_template, redirect, url_for, request, flash, abort,
+    send_file,
 )
 from flask_login import login_required, current_user
 from sqlalchemy import or_
@@ -15,6 +17,7 @@ from .models import (
     db, School, AcademicYear, Class, Module, Student, Enrollment, Teacher,
     Star, UrlValue, NoteValue, SUBJECT_STUDENT, SUBJECT_GROUP,
 )
+from .auth import admin_required
 
 main_bp = Blueprint("main", __name__)
 
@@ -459,6 +462,77 @@ def remove_student(enrollment_id):
     db.session.commit()
     flash("Étudiant retiré de la classe.", "success")
     return redirect(url_for("main.view_class", class_id=klass.id))
+
+
+# --------------------------------------------------------------------------- #
+# Administration : sauvegarde de la base (admin uniquement)
+# --------------------------------------------------------------------------- #
+def _db_file_path():
+    """Chemin absolu du fichier SQLite courant, ou None (ex. base en mémoire)."""
+    path = db.engine.url.database
+    if not path or path == ":memory:":
+        return None
+    return os.path.abspath(path)
+
+
+@main_bp.route("/admin")
+@admin_required
+def admin_home():
+    path = _db_file_path()
+    info = None
+    if path and os.path.exists(path):
+        st = os.stat(path)
+        from datetime import datetime
+        info = {
+            "path": path,
+            "size_kb": round(st.st_size / 1024, 1),
+            "modified": datetime.fromtimestamp(st.st_mtime).strftime("%d/%m/%Y %H:%M"),
+        }
+    counts = {
+        "schools": School.query.count(),
+        "classes": Class.query.count(),
+        "students": Student.query.count(),
+        "modules": Module.query.count(),
+        "teachers": Teacher.query.count(),
+    }
+    return render_template("admin.html", info=info, counts=counts)
+
+
+@main_bp.route("/admin/download-db")
+@admin_required
+def download_db():
+    """Télécharge une copie cohérente de la base SQLite (API backup)."""
+    import sqlite3
+    import tempfile
+    from datetime import datetime
+    from io import BytesIO
+
+    path = _db_file_path()
+    if not path or not os.path.exists(path):
+        flash("Base de données introuvable sur le serveur.", "error")
+        return redirect(url_for("main.admin_home"))
+
+    fd, tmp = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    try:
+        src = sqlite3.connect(path)
+        dst = sqlite3.connect(tmp)
+        with dst:
+            src.backup(dst)   # copie cohérente même en cas d'écriture concurrente
+        src.close()
+        dst.close()
+        with open(tmp, "rb") as f:
+            data = f.read()
+    finally:
+        os.remove(tmp)
+
+    bio = BytesIO(data)
+    bio.seek(0)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    return send_file(
+        bio, as_attachment=True, download_name=f"astranote-{stamp}.db",
+        mimetype="application/octet-stream",
+    )
 
 
 # --------------------------------------------------------------------------- #

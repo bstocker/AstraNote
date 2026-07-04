@@ -92,13 +92,18 @@ fichier WSGI vers `wsgi.py` (variable `application`) et définissez
 
 ## Sauvegarde de la base
 
-`scripts/backup_db.py` crée une copie horodatée de la base SQLite (via l'API
-`backup` de SQLite, cohérente même en écriture) et conserve les 14 dernières.
-À planifier en tâche quotidienne sur PythonAnywhere :
+Deux moyens :
 
-```bash
-python3 /home/astranote/mysite/scripts/backup_db.py
-```
+- **Depuis l'application** (le plus simple) : menu **Administration → Télécharger
+  la sauvegarde (.db)** (réservé à l'admin). Produit une copie cohérente à
+  télécharger en un clic.
+- **Tâche planifiée** : `scripts/backup_db.py` crée une copie horodatée de la base
+  SQLite (via l'API `backup`, cohérente même en écriture) et conserve les 14
+  dernières. À planifier en tâche quotidienne sur PythonAnywhere :
+
+  ```bash
+  python3 /home/astranote/mysite/scripts/backup_db.py
+  ```
 
 ## Roadmap (v2, cf. fiche §8)
 

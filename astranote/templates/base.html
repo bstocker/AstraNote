@@ -17,6 +17,7 @@
     <a href="{{ url_for('main.schools') }}">Écoles &amp; années</a>
     {% if current_user.is_admin %}
       <a href="{{ url_for('auth.teachers') }}">Enseignants</a>
+      <a href="{{ url_for('main.admin_home') }}">Administration</a>
     {% endif %}
     <a href="{{ url_for('main.create_class') }}">+ Classe</a>
   </nav>

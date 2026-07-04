@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Administration — AstraNote{% endblock %}
+{% block content %}
+<h1>Administration</h1>
+
+<div class="panel" style="max-width:640px;">
+  <h2 style="margin-top:0;">Sauvegarde de la base de données</h2>
+  <p class="muted">Téléchargez une copie complète et cohérente de la base (un seul fichier <code>.db</code>). Conservez-la en lieu sûr, hors du serveur.</p>
+
+  {% if info %}
+  <table class="list-table">
+    <tbody>
+      <tr><th>Fichier</th><td><code>{{ info.path }}</code></td></tr>
+      <tr><th>Taille</th><td>{{ info.size_kb }} Ko</td></tr>
+      <tr><th>Dernière modification</th><td>{{ info.modified }}</td></tr>
+    </tbody>
+  </table>
+  <div style="margin-top:14px;">
+    <a class="btn" href="{{ url_for('main.download_db') }}">⬇ Télécharger la sauvegarde (.db)</a>
+  </div>
+  {% else %}
+  <div class="flash error">Base de données introuvable (ou base en mémoire). Le téléchargement n'est pas disponible.</div>
+  {% endif %}
+
+  <p class="help">Pour restaurer : remplacez le fichier de base sur le serveur par ce téléchargement, puis rechargez la webapp. Une sauvegarde automatique quotidienne peut aussi être planifiée (script <code>scripts/backup_db.py</code>).</p>
+</div>
+
+<div class="panel" style="max-width:640px;">
+  <h2 style="margin-top:0;">Contenu de la base</h2>
+  <table class="list-table">
+    <tbody>
+      <tr><th>Écoles</th><td>{{ counts.schools }}</td></tr>
+      <tr><th>Classes</th><td>{{ counts.classes }}</td></tr>
+      <tr><th>Modules</th><td>{{ counts.modules }}</td></tr>
+      <tr><th>Étudiants</th><td>{{ counts.students }}</td></tr>
+      <tr><th>Enseignants</th><td>{{ counts.teachers }}</td></tr>
+    </tbody>
+  </table>
+</div>
+{% endblock %}
