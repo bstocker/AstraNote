@@ -158,6 +158,7 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
 - Saisie rapide des étoiles (0 à 4) au clic/clavier directement dans la cellule.
 - Sélection des statuts spéciaux (`ABS`, `Retard`, etc.), affichés en couleur.
 - Enregistrement immédiat ; totaux et note d'étoiles **mis à jour en direct**.
+- Les **étudiants neutralisés** sont regroupés **en bas** du tableau, grisés, et leurs cellules sont **en lecture seule** (aucune saisie possible).
 
 ### 5.6 Calcul et affichage de la note d'étoiles
 - Calcul automatique de la **note /20 au prorata**, arrondie au 0,5 (règles R1–R9).

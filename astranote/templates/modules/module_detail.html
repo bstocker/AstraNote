@@ -97,7 +97,7 @@
               {% set color = special_statuses.get(val) %}
               <td class="star-cell {{ 'st-' ~ color if color else '' }}"
                   data-subject="{{ subj.id }}" data-column="{{ sc.id }}">
-                <select class="star-select">
+                <select class="star-select" {{ 'disabled' if not subj.active }}>
                   {% for tok in all_tokens %}
                     <option value="{{ tok }}" {{ 'selected' if val == tok else '' }}>
                       {%- if tok in special_statuses -%}{{ tok }}
@@ -111,7 +111,7 @@
             {% for uc in gd.url_columns %}
               {% set uval = url_map.get((subj.id, uc.id), '') %}
               <td class="url-cell" data-subject="{{ subj.id }}" data-column="{{ uc.id }}">
-                <input type="url" class="url-input" value="{{ uval or '' }}" placeholder="https://…">
+                <input type="url" class="url-input" value="{{ uval or '' }}" placeholder="https://…" {{ 'disabled' if not subj.active }}>
                 {% if uval %}<a href="{{ uval }}" target="_blank" rel="noopener">↗</a>{% endif %}
               </td>
             {% endfor %}
@@ -125,11 +125,11 @@
             {% set nval = note_map.get((subj.id, nc.id)) %}
             <td class="note-cell" data-subject="{{ subj.id }}" data-column="{{ nc.id }}">
               <input type="number" step="0.5" min="0" max="20" class="note-input"
-                     value="{{ '' if nval is none else nval }}">
+                     value="{{ '' if nval is none else nval }}" {{ 'disabled' if not subj.active }}>
             </td>
           {% endfor %}
           <td class="comment-cell" data-subject="{{ subj.id }}">
-            <textarea class="comment-input" placeholder="Appréciation…">{{ subj.comment or '' }}</textarea>
+            <textarea class="comment-input" placeholder="Appréciation…" {{ 'disabled' if not subj.active }}>{{ subj.comment or '' }}</textarea>
           </td>
         </tr>
       {% else %}

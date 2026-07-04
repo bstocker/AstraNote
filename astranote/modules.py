@@ -45,8 +45,10 @@ def module_subjects(module):
              "comment": g.comment, "obj": g, "active": True}
             for g in groups
         ]
+    # Actifs d'abord (ordre alphabétique), puis les neutralisés en fin de liste.
     enrollments = sorted(
-        module.klass.enrollments, key=lambda e: e.student.full_name.lower()
+        module.klass.enrollments,
+        key=lambda e: (not e.student.active, e.student.full_name.lower()),
     )
     return [
         {"type": SUBJECT_STUDENT, "id": e.student.id, "label": e.student.full_name,
@@ -337,6 +339,14 @@ def _subject_type(module):
     return SUBJECT_GROUP if module.is_group_mode else SUBJECT_STUDENT
 
 
+def _subject_is_active(module, subject_id):
+    """Un étudiant neutralisé n'accepte plus aucune saisie (les groupes, si.)."""
+    if module.is_group_mode:
+        return True
+    student = db.session.get(Student, subject_id)
+    return bool(student and student.active)
+
+
 def _grade_payload(module):
     """Renvoie totaux + notes /20 recalculés pour tout le module."""
     subjects = module_subjects(module)
@@ -369,6 +379,8 @@ def save_star(module_id):
     col = db.session.get(StarColumn, column_id)
     if not col or col.grade_date.module_id != module.id:
         return jsonify(error="Colonne invalide"), 400
+    if not _subject_is_active(module, subject_id):
+        return jsonify(error="Étudiant neutralisé : saisie impossible"), 403
 
     stype = _subject_type(module)
     star = Star.query.filter_by(
@@ -403,6 +415,8 @@ def save_note(module_id):
     col = db.session.get(NoteColumn, column_id)
     if not col or col.module_id != module.id:
         return jsonify(error="Colonne invalide"), 400
+    if not _subject_is_active(module, subject_id):
+        return jsonify(error="Étudiant neutralisé : saisie impossible"), 403
 
     score = None
     if raw != "":
@@ -440,6 +454,8 @@ def save_url(module_id):
     col = db.session.get(UrlColumn, column_id)
     if not col or col.grade_date.module_id != module.id:
         return jsonify(error="Colonne invalide"), 400
+    if not _subject_is_active(module, subject_id):
+        return jsonify(error="Étudiant neutralisé : saisie impossible"), 403
 
     stype = _subject_type(module)
     uv = UrlValue.query.filter_by(
@@ -463,6 +479,9 @@ def save_comment(module_id):
     data = request.get_json(silent=True) or {}
     subject_id = data.get("subject_id")
     comment = str(data.get("value", "")).strip() or None
+
+    if not _subject_is_active(module, subject_id):
+        return jsonify(error="Étudiant neutralisé : saisie impossible"), 403
 
     if module.is_group_mode:
         group = db.session.get(Group, subject_id)
