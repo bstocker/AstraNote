@@ -65,7 +65,13 @@
 
   <!-- Étudiants -->
   <div class="panel" style="flex:1;">
-    <h2>Étudiants ({{ klass.enrollments|length }})</h2>
+    <div class="flex-between">
+      <h2>Étudiants ({{ klass.enrollments|length }})</h2>
+      {% if klass.enrollments %}
+      <a class="btn secondary small" href="{{ url_for('main.export_students', class_id=klass.id) }}"
+         title="Nom, email, pseudo Discord, lien GitHub et statut">⬇ Exporter (.xlsx)</a>
+      {% endif %}
+    </div>
     {% for e in klass.enrollments|sort(attribute='student.full_name') %}
       {% set st = e.student %}
       <div class="student-row {{ 'inactive' if not st.active }}">

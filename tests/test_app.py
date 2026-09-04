@@ -487,3 +487,39 @@ def test_group_color_purged_on_group_delete(app, admin):
     admin.post(f"/groups/{gid}/delete")
     with app.app_context():
         assert SubjectColor.query.count() == 0
+
+
+# --------------------------------------------------------------------------- #
+# Export Excel de la fiche administrative des étudiants
+# --------------------------------------------------------------------------- #
+def test_export_students_xlsx(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin, students=("Zoe", "Alice"))
+    admin.post(f"/enrollments/{enr['Zoe']}/student", data={
+        "full_name": "Zoe", "email": "zoe@ecoles-epsi.net",
+        "discord_alias": "zozo#1", "github_url": "https://github.com/zoe",
+    })
+    admin.post(f"/enrollments/{enr['Zoe']}/toggle-active")   # neutralisée
+
+    r = admin.get(f"/classes/{cid}/students.xlsx")
+    assert r.status_code == 200
+    assert "attachment" in r.headers.get("Content-Disposition", "")
+    ws = load_workbook(BytesIO(r.data)).active
+
+    assert ws.cell(row=2, column=1).value == "Nom complet"
+    rows = {ws.cell(row=r_, column=1).value: [ws.cell(row=r_, column=c).value
+                                              for c in range(1, 6)]
+            for r_ in range(3, ws.max_row + 1)}
+    assert rows["Zoe"] == ["Zoe", "zoe@ecoles-epsi.net", "zozo#1",
+                           "https://github.com/zoe", "Neutralisé"]
+    assert rows["Alice"][4] == "Actif"           # les neutralisés restent listés
+    assert list(rows) == ["Alice", "Zoe"]        # tri alphabétique
+    # Le bouton est proposé sur la fiche de classe.
+    assert "students.xlsx" in admin.get(f"/classes/{cid}").get_data(as_text=True)
+
+
+def test_export_students_respects_scope(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    make_teacher(app, "Prof", "p@x.fr")
+    c = app.test_client()
+    login(c, "p@x.fr")
+    assert c.get(f"/classes/{cid}/students.xlsx").status_code == 403

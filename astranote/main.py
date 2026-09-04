@@ -471,6 +471,72 @@ def remove_student(enrollment_id):
 
 
 # --------------------------------------------------------------------------- #
+# Export Excel de la fiche administrative des étudiants d'une classe
+# --------------------------------------------------------------------------- #
+@main_bp.route("/classes/<int:class_id>/students.xlsx")
+@login_required
+def export_students(class_id):
+    """Exporte en .xlsx les informations administratives des étudiants.
+
+    Une ligne par étudiant inscrit : nom, email, pseudo Discord, lien GitHub
+    et statut. Les étudiants neutralisés sont inclus (ils font partie de la
+    liste administrative) et repérés par la colonne « Statut ».
+    """
+    import re
+    from io import BytesIO
+
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill
+
+    # Import différé : modules.py importe déjà main.py (éviter le cycle).
+    from .modules import _safe_sheet_title
+
+    klass = get_class_or_403(class_id)
+    students = sorted(
+        (e.student for e in klass.enrollments),
+        key=lambda st: st.full_name.lower(),
+    )
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = _safe_sheet_title(klass.name)
+
+    grey = PatternFill("solid", fgColor="F1F5F9")
+    bold = Font(bold=True)
+
+    # Ligne 1 : rappel du contexte (classe, école, année).
+    ws["A1"] = (f"Classe : {klass.name} — {klass.school.name} · "
+                f"{klass.academic_year.label}")
+    ws["A1"].font = Font(bold=True, size=13)
+
+    headers = ["Nom complet", "Email", "Pseudo Discord", "Lien GitHub", "Statut"]
+    for col_idx, title in enumerate(headers, start=1):
+        cell = ws.cell(row=2, column=col_idx, value=title)
+        cell.font = bold
+        cell.fill = grey
+
+    for r, st in enumerate(students, start=3):
+        ws.cell(row=r, column=1, value=st.full_name).font = bold
+        ws.cell(row=r, column=2, value=st.email)
+        ws.cell(row=r, column=3, value=st.discord_alias)
+        ws.cell(row=r, column=4, value=st.github_url)
+        ws.cell(row=r, column=5, value="Actif" if st.active else "Neutralisé")
+
+    for letter, width in zip("ABCDE", (26, 32, 20, 40, 14)):
+        ws.column_dimensions[letter].width = width
+    ws.freeze_panes = "A3"
+
+    bio = BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+    filename = re.sub(r"[^\w\-]+", "_", klass.name).strip("_") or "classe"
+    return send_file(
+        bio, as_attachment=True, download_name=f"etudiants_{filename}.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+# --------------------------------------------------------------------------- #
 # Administration : sauvegarde de la base (admin uniquement)
 # --------------------------------------------------------------------------- #
 def _db_file_path():

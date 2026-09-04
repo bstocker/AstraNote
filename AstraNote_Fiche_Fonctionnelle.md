@@ -141,6 +141,7 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
 ### 5.4 Étudiants
 - Ajout d'étudiants (nom, email `@ecoles-epsi.net`, pseudo Discord).
 - **Modification des caractéristiques** d'un étudiant à tout moment (nom, email, pseudo Discord, lien GitHub). La modification vaut pour toutes ses classes.
+- **Export Excel de la liste administrative** de la classe (bouton sur la fiche de classe) : une ligne par étudiant avec nom, email, pseudo Discord, lien GitHub et statut (actif / neutralisé). Les étudiants neutralisés y figurent, ils font partie de la liste administrative.
 - **Neutralisation** d'un étudiant ayant quitté l'école : il est **grisé** dans les modules et **exclu du calcul du prorata** (il n'est plus la référence 20/20 et ne pénalise plus les autres). Ses étoiles sont **conservées** et l'opération est **réversible** (réactivation).
 - Rattachement à une classe.
 - **Commentaire général** libre par étudiant : appréciation globale saisie par l'enseignant, éditable à tout moment.
