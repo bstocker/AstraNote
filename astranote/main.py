@@ -151,25 +151,31 @@ def class_saisie_progress(klass):
     """Avancement de saisie d'une classe : % de cellules d'étoiles remplies.
 
     Une cellule = un sujet (étudiant actif ou groupe) × une colonne d'étoiles.
+    Le numérateur est restreint aux mêmes sujets que le dénominateur : sans ce
+    filtre, les étoiles des étudiants neutralisés — comptés nulle part au
+    dénominateur — feraient monter la progression jusqu'à 100 % alors que rien
+    n'est saisi pour les actifs.
     Retourne None si aucune cellule possible (aucune colonne / aucun sujet).
     """
     total, filled = 0, 0
     for module in klass.modules:
         star_col_ids = [sc.id for gd in module.grade_dates for sc in gd.star_columns]
         if module.is_group_mode:
-            subj_count = len(module.groups)
+            subject_ids = [g.id for g in module.groups]
             stype = SUBJECT_GROUP
         else:
-            subj_count = sum(1 for e in klass.enrollments if e.student.active)
+            subject_ids = [e.student_id for e in klass.enrollments if e.student.active]
             stype = SUBJECT_STUDENT
-        total += subj_count * len(star_col_ids)
-        if star_col_ids and subj_count:
+        total += len(subject_ids) * len(star_col_ids)
+        if star_col_ids and subject_ids:
+            # La contrainte d'unicité (sujet, colonne) garantit filled <= total.
             filled += Star.query.filter(
                 Star.subject_type == stype,
+                Star.subject_id.in_(subject_ids),
                 Star.star_column_id.in_(star_col_ids)).count()
     if total == 0:
         return None
-    return round(100 * min(filled, total) / total)
+    return round(100 * filled / total)
 
 
 # --------------------------------------------------------------------------- #

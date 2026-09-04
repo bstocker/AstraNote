@@ -20,6 +20,10 @@ class Config:
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
+    # Taille maximale d'une requête : borne l'import .xlsx, qui charge le
+    # classeur entier en mémoire (openpyxl). Au-delà, Flask renvoie un 413.
+    MAX_CONTENT_LENGTH = 8 * 1024 * 1024  # 8 Mo
+
     # Sécurité des cookies de session. SECURE exige HTTPS ; il est actif par
     # défaut (prod) et désactivable en local via ASTRANOTE_COOKIE_SECURE=0.
     SESSION_COOKIE_HTTPONLY = True

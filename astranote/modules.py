@@ -605,6 +605,33 @@ def _subject_is_active(module, subject_id):
     return bool(student and student.active)
 
 
+def _subject_id(data):
+    """Identifiant de sujet du corps JSON, normalisé en entier.
+
+    None si absent ou non numérique : `_subject_error` répondra « Sujet
+    invalide », comme pour un sujet étranger au module.
+    """
+    try:
+        return int(data.get("subject_id"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _subject_error(module, subject_id):
+    """Réponse d'erreur si le sujet n'accepte pas de saisie, sinon None.
+
+    Le sujet doit être une unité notée **de ce module** — sans ce contrôle, un
+    `subject_id` quelconque crée des lignes orphelines, invisibles dans la
+    grille mais comptées ailleurs (progression du tableau de bord) — et ne doit
+    pas être neutralisé.
+    """
+    if subject_id not in valid_subject_ids(module):
+        return jsonify(error="Sujet invalide"), 400
+    if not _subject_is_active(module, subject_id):
+        return jsonify(error="Étudiant neutralisé : saisie impossible"), 403
+    return None
+
+
 def _grade_payload(module):
     """Renvoie totaux + notes /20 recalculés pour tout le module."""
     subjects = module_subjects(module)
@@ -628,7 +655,7 @@ def _grade_payload(module):
 def save_star(module_id):
     module = get_module_or_403(module_id)
     data = request.get_json(silent=True) or {}
-    subject_id = data.get("subject_id")
+    subject_id = _subject_id(data)
     column_id = data.get("column_id")
     value = str(data.get("value", "0")).strip()
 
@@ -637,8 +664,9 @@ def save_star(module_id):
     col = db.session.get(StarColumn, column_id)
     if not col or col.grade_date.module_id != module.id:
         return jsonify(error="Colonne invalide"), 400
-    if not _subject_is_active(module, subject_id):
-        return jsonify(error="Étudiant neutralisé : saisie impossible"), 403
+    err = _subject_error(module, subject_id)
+    if err:
+        return err
 
     stype = _subject_type(module)
     star = Star.query.filter_by(
@@ -666,15 +694,16 @@ def save_star(module_id):
 def save_note(module_id):
     module = get_module_or_403(module_id)
     data = request.get_json(silent=True) or {}
-    subject_id = data.get("subject_id")
+    subject_id = _subject_id(data)
     column_id = data.get("column_id")
     raw = str(data.get("value", "")).strip().replace(",", ".")
 
     col = db.session.get(NoteColumn, column_id)
     if not col or col.module_id != module.id:
         return jsonify(error="Colonne invalide"), 400
-    if not _subject_is_active(module, subject_id):
-        return jsonify(error="Étudiant neutralisé : saisie impossible"), 403
+    err = _subject_error(module, subject_id)
+    if err:
+        return err
 
     score = None
     if raw != "":
@@ -705,15 +734,16 @@ def save_note(module_id):
 def save_url(module_id):
     module = get_module_or_403(module_id)
     data = request.get_json(silent=True) or {}
-    subject_id = data.get("subject_id")
+    subject_id = _subject_id(data)
     column_id = data.get("column_id")
     url = str(data.get("value", "")).strip() or None
 
     col = db.session.get(UrlColumn, column_id)
     if not col or col.grade_date.module_id != module.id:
         return jsonify(error="Colonne invalide"), 400
-    if not _subject_is_active(module, subject_id):
-        return jsonify(error="Étudiant neutralisé : saisie impossible"), 403
+    err = _subject_error(module, subject_id)
+    if err:
+        return err
 
     stype = _subject_type(module)
     uv = UrlValue.query.filter_by(
@@ -735,11 +765,12 @@ def save_url(module_id):
 def save_comment(module_id):
     module = get_module_or_403(module_id)
     data = request.get_json(silent=True) or {}
-    subject_id = data.get("subject_id")
+    subject_id = _subject_id(data)
     comment = str(data.get("value", "")).strip() or None
 
-    if not _subject_is_active(module, subject_id):
-        return jsonify(error="Étudiant neutralisé : saisie impossible"), 403
+    err = _subject_error(module, subject_id)
+    if err:
+        return err
 
     if module.is_group_mode:
         group = db.session.get(Group, subject_id)
@@ -767,15 +798,14 @@ def save_color(module_id):
     """
     module = get_module_or_403(module_id)
     data = request.get_json(silent=True) or {}
-    subject_id = data.get("subject_id")
+    subject_id = _subject_id(data)
     color = str(data.get("value", "")).strip()
 
     if color and color not in SUBJECT_COLORS:
         return jsonify(error="Couleur invalide"), 400
-    if subject_id not in valid_subject_ids(module):
-        return jsonify(error="Sujet invalide"), 400
-    if not _subject_is_active(module, subject_id):
-        return jsonify(error="Étudiant neutralisé : saisie impossible"), 403
+    err = _subject_error(module, subject_id)
+    if err:
+        return err
 
     stype = _subject_type(module)
     existing = SubjectColor.query.filter_by(

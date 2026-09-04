@@ -6,7 +6,7 @@ prorata (cf. fiche fonctionnelle). Flask + SQLAlchemy + Flask-Login.
 import os
 import secrets
 
-from flask import Flask
+from flask import Flask, flash, redirect, request, url_for
 from flask_login import LoginManager
 from flask_wtf import CSRFProtect
 from werkzeug.security import generate_password_hash
@@ -42,6 +42,13 @@ def create_app(config_object=Config):
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
     app.register_blueprint(modules_bp)
+
+    @app.errorhandler(413)
+    def too_large(_err):
+        """Fichier trop gros (cf. MAX_CONTENT_LENGTH) : message lisible plutôt
+        que la page d'erreur brute de Werkzeug."""
+        flash("Fichier trop volumineux : 8 Mo maximum.", "error")
+        return redirect(request.referrer or url_for("main.dashboard"))
 
     from . import grading
 
