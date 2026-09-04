@@ -6,7 +6,8 @@ from openpyxl import load_workbook
 from astranote import create_app, grading
 from astranote.models import (
     db, School, AcademicYear, Class, Module, Student, Enrollment,
-    GradeDate, StarColumn, NoteColumn, Group, Star, NoteValue, SubjectColor,
+    GradeDate, StarColumn, UrlColumn, NoteColumn, Group, Star, UrlValue,
+    NoteValue, SubjectColor, Teacher,
 )
 from conftest import make_teacher, login, ADMIN_PW, TestConfig
 
@@ -589,3 +590,116 @@ def test_module_ranking_empty_state_and_scope(app, admin):
     c = app.test_client()
     login(c, "p@x.fr")
     assert c.get(f"/modules/{mid}/ranking").status_code == 403
+
+
+# --------------------------------------------------------------------------- #
+# Durcissement : redirection de connexion, sujets de saisie, progression
+# --------------------------------------------------------------------------- #
+def test_login_next_url_must_be_internal(app):
+    """Le paramètre `next` ne doit jamais renvoyer vers un site tiers."""
+    for hostile in ("https://evil.example.com/", "//evil.example.com/",
+                    "/\\evil.example.com/", "http://evil.example.com"):
+        c = app.test_client()
+        r = c.post(f"/login?next={hostile}",
+                   data={"email": "admin@astranote.local", "password": ADMIN_PW})
+        assert r.status_code == 302
+        assert r.headers["Location"] == "/", hostile
+
+    # Une destination interne reste honorée.
+    c = app.test_client()
+    r = c.post("/login?next=/schools",
+               data={"email": "admin@astranote.local", "password": ADMIN_PW})
+    assert r.headers["Location"] == "/schools"
+
+
+def test_saisie_rejects_subject_outside_module(app, admin):
+    """Un sujet étranger au module ne doit créer aucune ligne orpheline."""
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    did, scid = add_star_column(app, admin, mid)
+    admin.post(f"/dates/{did}/url-columns", data={"title": "Rendu"})
+    admin.post(f"/modules/{mid}/note-columns", data={"title": "Note CC"})
+    with app.app_context():
+        ucid = UrlColumn.query.first().id
+        ncid = NoteColumn.query.first().id
+        # Étudiant réel, actif, mais inscrit dans aucune classe de ce module.
+        outsider = Student(full_name="Étranger")
+        db.session.add(outsider)
+        db.session.commit()
+        oid = outsider.id
+
+    for path, payload in (
+        ("save-star", {"column_id": scid, "value": "4"}),
+        ("save-url", {"column_id": ucid, "value": "http://x.fr"}),
+        ("save-note", {"column_id": ncid, "value": "12"}),
+        ("save-color", {"value": "red"}),
+        ("save-comment", {"value": "coucou"}),
+    ):
+        r = admin.post(f"/modules/{mid}/{path}", json={"subject_id": oid, **payload})
+        assert r.status_code == 400, path
+        assert r.get_json()["error"] == "Sujet invalide"
+
+    with app.app_context():
+        assert Star.query.filter_by(subject_id=oid).count() == 0
+        assert UrlValue.query.filter_by(subject_id=oid).count() == 0
+        assert NoteValue.query.filter_by(subject_id=oid).count() == 0
+        assert SubjectColor.query.filter_by(subject_id=oid).count() == 0
+
+
+def test_saisie_rejects_unknown_group(app, admin):
+    """En mode groupe, `_subject_is_active` est toujours vrai : c'est
+    l'appartenance au module qui doit filtrer."""
+    cid, mid, ids, enr = bootstrap_class(app, admin, work_mode="group")
+    _, scid = add_star_column(app, admin, mid)
+    r = admin.post(f"/modules/{mid}/save-star",
+                   json={"subject_id": 4242, "column_id": scid, "value": "4"})
+    assert r.status_code == 400
+    with app.app_context():
+        assert Star.query.filter_by(subject_type="group", subject_id=4242).count() == 0
+
+
+def test_dashboard_progress_ignores_neutralized(app, admin):
+    """Les étoiles d'un neutralisé ne comptent pas : il est hors dénominateur."""
+    cid, mid, ids, enr = bootstrap_class(app, admin, students=("Alice", "Bob"))
+    _, scid = add_star_column(app, admin, mid)
+    admin.post(f"/modules/{mid}/save-star",
+               json={"subject_id": ids["Bob"], "column_id": scid, "value": "3"})
+    admin.post(f"/enrollments/{enr['Bob']}/toggle-active")
+    with app.app_context():
+        from astranote.main import class_saisie_progress
+        klass = db.session.get(Class, cid)
+        # Reste Alice, active et non saisie : 0 % (et non 100 %).
+        assert class_saisie_progress(klass) == 0
+
+
+def test_delete_teacher_blocked_by_owned_structure(app, admin):
+    """Supprimer un enseignant propriétaire d'une école laisserait un
+    teacher_id orphelin — donc une école « commune » par accident."""
+    tid = make_teacher(app, "Prof", "p@x.fr")
+    c = app.test_client()
+    login(c, "p@x.fr")
+    c.post("/schools", data={"name": "École du prof"})
+
+    admin.post(f"/teachers/{tid}/delete")
+    with app.app_context():
+        assert db.session.get(Teacher, tid) is not None
+        assert School.query.filter_by(teacher_id=tid).count() == 1
+
+    # Une fois l'école supprimée, la suppression passe.
+    with app.app_context():
+        db.session.delete(School.query.filter_by(teacher_id=tid).first())
+        db.session.commit()
+    admin.post(f"/teachers/{tid}/delete")
+    with app.app_context():
+        assert db.session.get(Teacher, tid) is None
+
+
+def test_upload_size_is_capped(app, admin):
+    """Un .xlsx géant est refusé avant d'être chargé en mémoire par openpyxl."""
+    assert app.config["MAX_CONTENT_LENGTH"] == 8 * 1024 * 1024
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    huge = BytesIO(b"x" * (app.config["MAX_CONTENT_LENGTH"] + 1024))
+    r = admin.post(f"/modules/{mid}/import",
+                   data={"file": (huge, "notes.xlsx")},
+                   content_type="multipart/form-data")
+    assert r.status_code == 302
+    assert "trop volumineux" in admin.get("/", follow_redirects=True).get_data(as_text=True)

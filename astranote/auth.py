@@ -4,6 +4,7 @@ Connexion email / mot de passe (hash Werkzeug). Les comptes enseignants sont
 créés par l'administrateur (fiche §4, §5.1).
 """
 from functools import wraps
+from urllib.parse import urlparse
 
 from flask import (
     Blueprint, render_template, redirect, url_for, request, flash, abort,
@@ -26,6 +27,24 @@ def admin_required(view):
     return wrapped
 
 
+def _safe_next_url(target):
+    """Chemin interne issu du paramètre `next`, ou None s'il est douteux.
+
+    Empêche l'open redirect : seule une URL relative au site est acceptée
+    (« /classes/3 »), jamais une URL absolue ni protocole-relative (« //site »,
+    « /\\site »), qui renverrait l'enseignant vers un site tiers juste après
+    une connexion réussie.
+    """
+    if not target or not target.startswith("/"):
+        return None
+    if target[1:2] in ("/", "\\"):
+        return None
+    parsed = urlparse(target)
+    if parsed.scheme or parsed.netloc:
+        return None
+    return target
+
+
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
     if current_user.is_authenticated:
@@ -37,7 +56,7 @@ def login():
         teacher = Teacher.query.filter_by(email=email).first()
         if teacher and check_password_hash(teacher.password_hash, password):
             login_user(teacher)
-            next_url = request.args.get("next")
+            next_url = _safe_next_url(request.args.get("next"))
             return redirect(next_url or url_for("main.dashboard"))
         flash("Email ou mot de passe incorrect.", "error")
 
@@ -114,6 +133,12 @@ def delete_teacher(teacher_id):
         return redirect(url_for("auth.teachers"))
     if teacher.classes:
         flash("Impossible : cet enseignant a encore des classes rattachées.", "error")
+        return redirect(url_for("auth.teachers"))
+    if teacher.owned_schools or teacher.owned_years:
+        # Sinon school.teacher_id / academic_year.teacher_id pointeraient dans le
+        # vide et l'entité deviendrait « commune » (visible de tous) par accident.
+        flash("Impossible : cet enseignant possède encore des écoles ou des "
+              "années académiques.", "error")
         return redirect(url_for("auth.teachers"))
     db.session.delete(teacher)
     db.session.commit()
