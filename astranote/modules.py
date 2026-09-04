@@ -16,6 +16,7 @@ from flask_login import login_required, current_user
 from .models import (
     db, Class, Module, GradeDate, StarColumn, UrlColumn, NoteColumn,
     Student, Enrollment, Group, GroupMember, Star, UrlValue, NoteValue,
+    SubjectColor, SUBJECT_COLORS,
     SUBJECT_STUDENT, SUBJECT_GROUP, WORK_MODE_INDIVIDUAL, WORK_MODE_GROUP,
 )
 from . import grading
@@ -28,6 +29,12 @@ NOTES_METHODS = {
     "mail": "Mail",
     "institutional": "Outil institutionnel de l'école",
     "other": "Autre",
+}
+
+
+# Libellés des couleurs de cellule (infobulles de la palette).
+SUBJECT_COLOR_LABELS = {
+    "green": "Vert", "yellow": "Jaune", "red": "Rouge", "grey": "Gris",
 }
 
 
@@ -48,6 +55,11 @@ def get_module_or_403(module_id):
 
 def _next_position(items):
     return (max((i.position or 0) for i in items) + 1) if items else 0
+
+
+def valid_subject_ids(module):
+    """Identifiants des sujets réellement rattachés au module (garde-fou AJAX)."""
+    return {s["id"] for s in module_subjects(module)}
 
 
 def module_subjects(module):
@@ -209,6 +221,12 @@ def view_module(module_id):
             NoteValue.note_column_id.in_(note_col_ids)).all():
             note_map[(n.subject_id, n.note_column_id)] = n.score
 
+    color_map = {
+        c.subject_id: c.color
+        for c in SubjectColor.query.filter_by(
+            module_id=module.id, subject_type=subject_type).all()
+    }
+
     # Étudiants actifs encore non affectés à un groupe (mode groupe). Les
     # étudiants neutralisés (partis) n'ont pas besoin d'être affectés.
     unassigned_active = []
@@ -226,6 +244,8 @@ def view_module(module_id):
         "modules/module_detail.html",
         module=module, subjects=subjects, grades=grades,
         star_map=star_map, url_map=url_map, note_map=note_map,
+        color_map=color_map, subject_colors=SUBJECT_COLORS,
+        color_labels=SUBJECT_COLOR_LABELS,
         all_tokens=grading.ALL_TOKENS, special_statuses=grading.SPECIAL_STATUSES,
         unassigned_active=unassigned_active,
     )
@@ -516,7 +536,7 @@ def remove_group_member(member_id):
 def delete_group(group_id):
     group = db.session.get(Group, group_id) or abort(404)
     module = get_module_or_403(group.module_id)
-    # Purge les étoiles/notes/liens du groupe (référencés par subject_id).
+    # Purge les étoiles/notes/liens/couleurs du groupe (référencés par subject_id).
     purge_subject_data(SUBJECT_GROUP, group.id)
     db.session.delete(group)
     db.session.commit()
@@ -689,6 +709,44 @@ def save_comment(module_id):
         enr.general_comment = comment
     db.session.commit()
     return jsonify(ok=True)
+
+
+@modules_bp.route("/modules/<int:module_id>/save-color", methods=["POST"])
+@login_required
+def save_color(module_id):
+    """Pose (ou retire) la couleur de fond de la cellule d'un sujet.
+
+    Valeur vide = aucune couleur : la ligne est alors supprimée plutôt que
+    stockée, pour ne garder en base que les couleurs réellement posées.
+    """
+    module = get_module_or_403(module_id)
+    data = request.get_json(silent=True) or {}
+    subject_id = data.get("subject_id")
+    color = str(data.get("value", "")).strip()
+
+    if color and color not in SUBJECT_COLORS:
+        return jsonify(error="Couleur invalide"), 400
+    if subject_id not in valid_subject_ids(module):
+        return jsonify(error="Sujet invalide"), 400
+    if not _subject_is_active(module, subject_id):
+        return jsonify(error="Étudiant neutralisé : saisie impossible"), 403
+
+    stype = _subject_type(module)
+    existing = SubjectColor.query.filter_by(
+        module_id=module.id, subject_type=stype, subject_id=subject_id,
+    ).first()
+    if not color:
+        if existing:
+            db.session.delete(existing)
+    elif existing:
+        existing.color = color
+    else:
+        db.session.add(SubjectColor(
+            module_id=module.id, subject_type=stype,
+            subject_id=subject_id, color=color,
+        ))
+    db.session.commit()
+    return jsonify(ok=True, value=color)
 
 
 # --------------------------------------------------------------------------- #

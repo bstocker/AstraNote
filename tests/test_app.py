@@ -6,7 +6,7 @@ from openpyxl import load_workbook
 from astranote import create_app, grading
 from astranote.models import (
     db, School, AcademicYear, Class, Module, Student, Enrollment,
-    GradeDate, StarColumn, NoteColumn, Group, Star, NoteValue,
+    GradeDate, StarColumn, NoteColumn, Group, Star, NoteValue, SubjectColor,
 )
 from conftest import make_teacher, login, ADMIN_PW, TestConfig
 
@@ -401,3 +401,64 @@ def test_dashboard_progress(app, admin):
         from astranote.main import class_saisie_progress
         klass = db.session.get(Class, cid)
         assert class_saisie_progress(klass) == 33
+
+
+# --------------------------------------------------------------------------- #
+# Couleur de fond de la cellule sujet (propre au module)
+# --------------------------------------------------------------------------- #
+def test_subject_color_is_per_module(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    admin.post(f"/classes/{cid}/modules/new", data={"name": "Réseau"})
+    with app.app_context():
+        other = Module.query.filter_by(name="Réseau").first().id
+
+    assert admin.post(f"/modules/{mid}/save-color",
+                      json={"subject_id": ids["Alice"], "value": "green"}).status_code == 200
+    assert admin.post(f"/modules/{other}/save-color",
+                      json={"subject_id": ids["Alice"], "value": "red"}).status_code == 200
+    # La même étudiante est verte dans un module, rouge dans l'autre.
+    assert "subject col-green" in admin.get(f"/modules/{mid}").get_data(as_text=True)
+    assert "subject col-red" in admin.get(f"/modules/{other}").get_data(as_text=True)
+
+    # Valeur vide = retrait : la ligne est supprimée, pas conservée.
+    admin.post(f"/modules/{mid}/save-color", json={"subject_id": ids["Alice"], "value": ""})
+    with app.app_context():
+        assert SubjectColor.query.filter_by(module_id=mid).count() == 0
+        assert SubjectColor.query.filter_by(module_id=other).count() == 1
+
+
+def test_subject_color_rejects_invalid_input(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    # Couleur hors liste
+    assert admin.post(f"/modules/{mid}/save-color",
+                      json={"subject_id": ids["Alice"], "value": "fuchsia"}).status_code == 400
+    # Sujet qui n'appartient pas au module
+    assert admin.post(f"/modules/{mid}/save-color",
+                      json={"subject_id": 99999, "value": "red"}).status_code == 400
+    # Étudiant neutralisé : verrouillé comme le reste de la saisie
+    admin.post(f"/enrollments/{enr['Bob']}/toggle-active")
+    assert admin.post(f"/modules/{mid}/save-color",
+                      json={"subject_id": ids["Bob"], "value": "red"}).status_code == 403
+    with app.app_context():
+        assert SubjectColor.query.count() == 0
+
+
+def test_subject_color_purged_on_delete(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    admin.post(f"/modules/{mid}/save-color", json={"subject_id": ids["Alice"], "value": "grey"})
+    admin.post(f"/enrollments/{enr['Alice']}/delete")
+    with app.app_context():
+        assert SubjectColor.query.count() == 0
+
+
+def test_group_color_purged_on_group_delete(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin, work_mode="group")
+    admin.post(f"/modules/{mid}/groups", data={"name": "G1"})
+    with app.app_context():
+        gid = Group.query.first().id
+    assert admin.post(f"/modules/{mid}/save-color",
+                      json={"subject_id": gid, "value": "yellow"}).status_code == 200
+    assert "subject col-yellow" in admin.get(f"/modules/{mid}").get_data(as_text=True)
+    admin.post(f"/groups/{gid}/delete")
+    with app.app_context():
+        assert SubjectColor.query.count() == 0

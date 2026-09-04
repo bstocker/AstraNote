@@ -163,6 +163,8 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
 - Sélection des statuts spéciaux (`ABS`, `Retard`, etc.), affichés en couleur.
 - Enregistrement immédiat ; totaux et note d'étoiles **mis à jour en direct**.
 - Les **étudiants neutralisés** sont regroupés **en bas** du tableau, grisés, et leurs cellules sont **en lecture seule** (aucune saisie possible).
+- La cellule **Étudiant** (ou **Groupe**) peut recevoir une **couleur de fond** au choix — **vert**, **jaune**, **rouge** ou **gris** — via une petite palette dans la cellule ; la signification est libre (repérage visuel de l'enseignant). La couleur est **propre au module** : un même étudiant peut être vert dans un module et rouge dans un autre. Elle n'a **aucun effet sur les calculs**.
+- Le **pseudo Discord** de l'étudiant est rappelé sous son nom (s'il est renseigné), pour l'identifier pendant la saisie.
 
 ### 5.6 Calcul et affichage de la note d'étoiles
 - Calcul automatique de la **note /20 au prorata**, arrondie au 0,5 (règles R1–R9).

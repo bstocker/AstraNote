@@ -152,6 +152,28 @@ table.grid thead th.subject { background: #f8fafc; z-index: 3; }
 /* Pseudo Discord sous le nom de l'étudiant (repérage pendant la saisie). */
 .discord { display: block; font-weight: 400; font-size: 12px; color: var(--muted); }
 .discord.inline { display: inline; }
+
+/* Couleur de fond posée sur la cellule d'un sujet (propre au module).
+   !important : la colonne figée impose sinon son fond blanc. */
+table.grid td.subject.col-green  { background: #dcfce7 !important; }
+table.grid td.subject.col-yellow { background: #fef9c3 !important; }
+table.grid td.subject.col-red    { background: #fee2e2 !important; }
+table.grid td.subject.col-grey   { background: #e2e8f0 !important; }
+
+/* Palette : discrète au repos, pleinement visible au survol de la ligne. */
+.color-picker { display: flex; gap: 3px; margin-top: 4px; opacity: .35; transition: opacity .15s; }
+table.grid tr:hover .color-picker, .color-picker:focus-within { opacity: 1; }
+.swatch {
+  width: 14px; height: 14px; padding: 0; border-radius: 50%;
+  border: 1px solid var(--border); cursor: pointer;
+  font-size: 9px; line-height: 1; color: var(--muted);
+}
+.swatch.sw-green  { background: #86efac; }
+.swatch.sw-yellow { background: #fde047; }
+.swatch.sw-red    { background: #fca5a5; }
+.swatch.sw-grey   { background: #cbd5e1; }
+.swatch.sw-none   { background: #fff; }
+.swatch.on { box-shadow: 0 0 0 2px var(--accent); border-color: var(--accent); }
 table.grid tr.reference td.subject { color: var(--accent-dark); font-weight: 700; }
 td.total { font-weight: 600; background: #f8fafc; }
 td.note20 { font-weight: 700; background: #eef2ff; }

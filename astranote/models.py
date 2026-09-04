@@ -18,6 +18,10 @@ SUBJECT_GROUP = "group"
 WORK_MODE_INDIVIDUAL = "individual"
 WORK_MODE_GROUP = "group"
 
+# Couleurs de fond posables sur la cellule « Étudiant » / « Groupe » d'une
+# grille de module. La signification est laissée à l'enseignant.
+SUBJECT_COLORS = ("green", "yellow", "red", "grey")
+
 
 class School(db.Model):
     __tablename__ = "school"
@@ -95,6 +99,9 @@ class Module(db.Model):
         order_by="NoteColumn.position",
     )
     groups = db.relationship("Group", backref="module", cascade="all, delete-orphan")
+    subject_colors = db.relationship(
+        "SubjectColor", backref="module", cascade="all, delete-orphan",
+    )
 
     @property
     def is_group_mode(self):
@@ -229,4 +236,23 @@ class NoteValue(db.Model):
     __table_args__ = (
         db.UniqueConstraint("subject_type", "subject_id", "note_column_id",
                             name="uq_note_subject_col"),
+    )
+
+
+class SubjectColor(db.Model):
+    """Couleur de fond de la cellule d'un sujet, propre à un module.
+
+    Un même étudiant peut donc être vert dans un module et rouge dans un
+    autre. L'absence de ligne = aucune couleur.
+    """
+    __tablename__ = "subject_color"
+    id = db.Column(db.Integer, primary_key=True)
+    module_id = db.Column(db.Integer, db.ForeignKey("module.id"), nullable=False)
+    subject_type = db.Column(db.String(10), nullable=False)
+    subject_id = db.Column(db.Integer, nullable=False)
+    color = db.Column(db.String(10), nullable=False)  # cf. SUBJECT_COLORS
+
+    __table_args__ = (
+        db.UniqueConstraint("module_id", "subject_type", "subject_id",
+                            name="uq_color_module_subject"),
     )

@@ -93,7 +93,8 @@
          data-save-star="{{ url_for('modules.save_star', module_id=module.id) }}"
          data-save-note="{{ url_for('modules.save_note', module_id=module.id) }}"
          data-save-url="{{ url_for('modules.save_url', module_id=module.id) }}"
-         data-save-comment="{{ url_for('modules.save_comment', module_id=module.id) }}">
+         data-save-comment="{{ url_for('modules.save_comment', module_id=module.id) }}"
+         data-save-color="{{ url_for('modules.save_color', module_id=module.id) }}">
     <thead>
       <tr>
         <th class="subject" rowspan="2">{{ 'Groupe' if module.is_group_mode else 'Étudiant' }}</th>
@@ -152,9 +153,21 @@
       {% for subj in subjects %}
         {% set g = grades.get(subj.id, {'total':0,'note':none,'is_reference':false}) %}
         <tr class="{{ 'reference' if g.is_reference else '' }} {{ 'inactive' if not subj.active else '' }}">
-          <td class="subject">
+          {% set scolor = color_map.get(subj.id) %}
+          <td class="subject {{ 'col-' ~ scolor if scolor else '' }}" data-subject="{{ subj.id }}">
             {{ subj.label }}{% if not subj.active %} <span class="badge neutral">neutralisé</span>{% endif %}
             {% if subj.discord %}<span class="discord" title="Pseudo Discord">💬 {{ subj.discord }}</span>{% endif %}
+            {% if subj.active %}
+              <span class="color-picker" role="group" aria-label="Couleur de fond">
+                {% for col in subject_colors %}
+                  <button type="button" class="swatch sw-{{ col }} {{ 'on' if scolor == col else '' }}"
+                          data-color="{{ col }}" title="{{ color_labels[col] }}"
+                          aria-label="{{ color_labels[col] }}"></button>
+                {% endfor %}
+                <button type="button" class="swatch sw-none {{ 'on' if not scolor else '' }}"
+                        data-color="" title="Aucune couleur" aria-label="Aucune couleur">✕</button>
+              </span>
+            {% endif %}
           </td>
           {% for gd in module.grade_dates %}
             {% for sc in gd.star_columns %}

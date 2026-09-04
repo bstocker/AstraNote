@@ -15,7 +15,7 @@ from sqlalchemy import or_
 
 from .models import (
     db, School, AcademicYear, Class, Module, Student, Enrollment, Teacher,
-    Star, UrlValue, NoteValue, SUBJECT_STUDENT, SUBJECT_GROUP,
+    Star, UrlValue, NoteValue, SubjectColor, SUBJECT_STUDENT, SUBJECT_GROUP,
 )
 from .auth import admin_required
 
@@ -26,12 +26,14 @@ main_bp = Blueprint("main", __name__)
 # Nettoyage des données orphelines
 # --------------------------------------------------------------------------- #
 def purge_subject_data(subject_type, subject_id,
-                       star_col_ids=None, url_col_ids=None, note_col_ids=None):
-    """Supprime les étoiles / notes / liens d'un sujet (étudiant ou groupe).
+                       star_col_ids=None, url_col_ids=None, note_col_ids=None,
+                       module_ids=None):
+    """Supprime étoiles / notes / liens / couleurs d'un sujet (étudiant ou groupe).
 
     Ces tables référencent `subject_id` sans clé étrangère : sans ce nettoyage,
     supprimer un étudiant/groupe laisserait des lignes orphelines. Si une liste
-    de colonnes est fournie, on se limite à celles-ci ; sinon on purge tout.
+    de colonnes (ou de modules) est fournie, on se limite à celle-ci ; sinon on
+    purge tout.
     """
     def _delete(model, col_attr, col_ids):
         q = model.query.filter_by(subject_type=subject_type, subject_id=subject_id)
@@ -42,6 +44,8 @@ def purge_subject_data(subject_type, subject_id,
     _delete(Star, Star.star_column_id, star_col_ids)
     _delete(UrlValue, UrlValue.url_column_id, url_col_ids)
     _delete(NoteValue, NoteValue.note_column_id, note_col_ids)
+    # Les couleurs sont rattachées au module, pas à une colonne.
+    _delete(SubjectColor, SubjectColor.module_id, module_ids)
 
 
 def _class_column_ids(klass):
@@ -448,9 +452,11 @@ def remove_student(enrollment_id):
     klass = get_class_or_403(enr.class_id)
     student = enr.student
 
-    # Purge les étoiles/notes/liens de l'étudiant dans les modules de cette classe.
+    # Purge étoiles/notes/liens/couleurs de l'étudiant dans les modules de
+    # cette classe (les autres classes de l'étudiant sont préservées).
     star_ids, url_ids, note_ids = _class_column_ids(klass)
-    purge_subject_data(SUBJECT_STUDENT, student.id, star_ids, url_ids, note_ids)
+    purge_subject_data(SUBJECT_STUDENT, student.id, star_ids, url_ids, note_ids,
+                       module_ids=[m.id for m in klass.modules])
 
     if len(student.enrollments) <= 1:
         # Dernier rattachement : purge résiduelle puis suppression de l'étudiant

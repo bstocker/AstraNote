@@ -10,7 +10,10 @@
     note: grid.dataset.saveNote,
     url: grid.dataset.saveUrl,
     comment: grid.dataset.saveComment,
+    color: grid.dataset.saveColor,
   };
+
+  const CELL_COLORS = ["green", "yellow", "red", "grey"];
 
   const SPECIAL_COLORS = {
     "ABS": "red", "Pas de PC": "red",
@@ -139,6 +142,26 @@
         });
         flash(cell, true);
       } catch (e) { flash(cell, false); alert(e.message); }
+    });
+  });
+
+  // --- Couleur de fond de la cellule sujet ---
+  grid.querySelectorAll(".color-picker").forEach((picker) => {
+    const cell = picker.closest("td.subject");
+    picker.querySelectorAll(".swatch").forEach((sw) => {
+      sw.addEventListener("click", async () => {
+        const color = sw.dataset.color;
+        try {
+          await postJSON(urls.color, {
+            subject_id: Number(cell.dataset.subject),
+            value: color,
+          });
+          CELL_COLORS.forEach((c) => cell.classList.remove("col-" + c));
+          if (color) cell.classList.add("col-" + color);
+          picker.querySelectorAll(".swatch").forEach((o) => o.classList.remove("on"));
+          sw.classList.add("on");
+        } catch (e) { alert(e.message); }
+      });
     });
   });
 
