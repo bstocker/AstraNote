@@ -149,6 +149,9 @@ table.grid td.subject, table.grid th.subject {
   min-width: 190px; font-weight: 500;
 }
 table.grid thead th.subject { background: #f8fafc; z-index: 3; }
+/* Pseudo Discord sous le nom de l'étudiant (repérage pendant la saisie). */
+.discord { display: block; font-weight: 400; font-size: 12px; color: var(--muted); }
+.discord.inline { display: inline; }
 table.grid tr.reference td.subject { color: var(--accent-dark); font-weight: 700; }
 td.total { font-weight: 600; background: #f8fafc; }
 td.note20 { font-weight: 700; background: #eef2ff; }

@@ -59,7 +59,8 @@ def module_subjects(module):
         groups = sorted(module.groups, key=lambda g: g.name.lower())
         return [
             {"type": SUBJECT_GROUP, "id": g.id, "label": g.name,
-             "comment": g.comment, "obj": g, "active": True}
+             "comment": g.comment, "obj": g, "active": True,
+             "discord": None}
             for g in groups
         ]
     # Actifs d'abord (ordre alphabétique), puis les neutralisés en fin de liste.
@@ -70,7 +71,7 @@ def module_subjects(module):
     return [
         {"type": SUBJECT_STUDENT, "id": e.student.id, "label": e.student.full_name,
          "comment": e.general_comment, "obj": e.student, "enrollment": e,
-         "active": e.student.active}
+         "active": e.student.active, "discord": e.student.discord_alias}
         for e in enrollments
     ]
 

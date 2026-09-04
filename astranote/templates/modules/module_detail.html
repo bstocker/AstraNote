@@ -152,7 +152,10 @@
       {% for subj in subjects %}
         {% set g = grades.get(subj.id, {'total':0,'note':none,'is_reference':false}) %}
         <tr class="{{ 'reference' if g.is_reference else '' }} {{ 'inactive' if not subj.active else '' }}">
-          <td class="subject">{{ subj.label }}{% if not subj.active %} <span class="badge neutral">neutralisé</span>{% endif %}</td>
+          <td class="subject">
+            {{ subj.label }}{% if not subj.active %} <span class="badge neutral">neutralisé</span>{% endif %}
+            {% if subj.discord %}<span class="discord" title="Pseudo Discord">💬 {{ subj.discord }}</span>{% endif %}
+          </td>
           {% for gd in module.grade_dates %}
             {% for sc in gd.star_columns %}
               {% set val = star_map.get((subj.id, sc.id), '0') %}
@@ -360,7 +363,7 @@
       </div>
       <ul style="padding-left:16px; margin:8px 0;">
         {% for mem in grp.members %}
-        <li>{{ mem.student.full_name }}
+        <li>{{ mem.student.full_name }}{% if mem.student.discord_alias %} <span class="discord inline" title="Pseudo Discord">💬 {{ mem.student.discord_alias }}</span>{% endif %}
           <form method="post" action="{{ url_for('modules.remove_group_member', member_id=mem.id) }}" style="display:inline;">
 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button class="btn danger small" style="padding:0 5px;">✕</button>
