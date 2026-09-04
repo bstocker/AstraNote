@@ -173,10 +173,35 @@ def test_rename_and_reorder_columns(app, admin):
 # --------------------------------------------------------------------------- #
 def test_edit_module_discord(app, admin):
     _, mid, _, _ = bootstrap_class(app, admin)
-    admin.post(f"/modules/{mid}/edit", data={"name": "Crypto+", "discord_url": "https://discord.com/z"})
+    admin.post(f"/modules/{mid}/edit", data={
+        "name": "Crypto+", "discord_url": "https://discord.com/z",
+        "discord_ref_url": "https://discord.com/ref",
+    })
     with app.app_context():
         m = db.session.get(Module, mid)
         assert m.name == "Crypto+" and m.discord_url == "https://discord.com/z"
+        assert m.discord_ref_url == "https://discord.com/ref"
+    # Les deux liens sont indépendants : vider l'un conserve l'autre.
+    admin.post(f"/modules/{mid}/edit", data={
+        "name": "Crypto+", "discord_url": "", "discord_ref_url": "https://discord.com/ref",
+    })
+    html = admin.get(f"/modules/{mid}").get_data(as_text=True)
+    with app.app_context():
+        m = db.session.get(Module, mid)
+        assert m.discord_url is None and m.discord_ref_url == "https://discord.com/ref"
+    assert "Discord de référence" in html
+
+
+def test_create_module_with_both_discord_links(app, admin):
+    cid, _, _, _ = bootstrap_class(app, admin)
+    admin.post(f"/classes/{cid}/modules/new", data={
+        "name": "Réseau", "work_mode": "individual",
+        "discord_url": "https://discord.com/a", "discord_ref_url": "https://discord.com/b",
+    })
+    with app.app_context():
+        m = Module.query.filter_by(name="Réseau").first()
+        assert m.discord_url == "https://discord.com/a"
+        assert m.discord_ref_url == "https://discord.com/b"
 
 
 # --------------------------------------------------------------------------- #

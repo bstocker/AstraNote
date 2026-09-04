@@ -82,6 +82,8 @@ class Module(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120), nullable=False)
     discord_url = db.Column(db.String(500))  # lien vers le salon Discord (cliquable)
+    # Second lien Discord : le salon « de référence » (ressources, consignes…).
+    discord_ref_url = db.Column(db.String(500))
     class_id = db.Column(db.Integer, db.ForeignKey("class.id"), nullable=False)
     work_mode = db.Column(db.String(20), nullable=False, default=WORK_MODE_INDIVIDUAL)
     # Suivi de la transmission des notes à l'établissement.

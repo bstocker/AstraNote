@@ -130,7 +130,7 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
 ### 5.3 Modules, dates et colonnes
 - CRUD **modules** au sein d'une classe.
 - À la création d'un module, choix du **mode de travail** : **individuel** ou **en groupe**.
-- **Édition d'un module** : nom et **lien Discord** (URL cliquable). Le mode de travail n'est **pas** modifiable après création (il conditionne groupes et notes déjà saisis).
+- **Édition d'un module** : nom et **deux liens Discord** (URL cliquables) : le **lien Discord** du module (salon de travail) et le **Discord de référence** (salon de ressources/consignes). Les deux sont facultatifs et indépendants. Le mode de travail n'est **pas** modifiable après création (il conditionne groupes et notes déjà saisis).
 - Ajout de **dates** (séances) dans un module.
 - **Plusieurs colonnes d'étoiles par date** : une date peut porter autant d'exercices (colonnes) que nécessaire.
 - **Ajout d'une colonne d'étoiles à tout moment**, y compris sur une date **existante**, avec un intitulé (ex. « CMAKE », « Projet »).
@@ -206,7 +206,7 @@ School(id, name, teacher_id, billing_emails, observation)  # billing_emails/obse
 AcademicYear(id, label, teacher_id)           # ex. "2025-2026" ; NULL = année commune (admin)
 Teacher(id, name, email, password_hash, role) # role = admin | teacher
 Class(id, name, school_id, academic_year_id, teacher_id, hourly_rate)  # hourly_rate = taux horaire €/h
-Module(id, name, discord_url, class_id, work_mode,          # work_mode = individual | group
+Module(id, name, discord_url, discord_ref_url, class_id, work_mode,   # work_mode = individual | group
        notes_sent, notes_sent_date, notes_sent_method, notes_sent_detail)  # transmission des notes à l'établissement
 GradeDate(id, module_id, label, date, position)      # une date/séance
 StarColumn(id, grade_date_id, title, position)        # colonne d'étoiles ; title = titre de l'exercice

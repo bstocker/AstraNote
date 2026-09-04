@@ -19,6 +19,9 @@
       {% if module.discord_url %} ·
         <a href="{{ module.discord_url }}" target="_blank" rel="noopener">💬 Discord ↗</a>
       {% endif %}
+      {% if module.discord_ref_url %} ·
+        <a href="{{ module.discord_ref_url }}" target="_blank" rel="noopener">📌 Discord de référence ↗</a>
+      {% endif %}
     </p>
     <p style="margin:4px 0 0;">
       {% if module.notes_sent %}
@@ -45,6 +48,8 @@
       <input type="text" name="name" value="{{ module.name }}" required>
       <label>Lien Discord (URL)</label>
       <input type="url" name="discord_url" value="{{ module.discord_url or '' }}" placeholder="https://discord.com/channels/…">
+      <label>Discord de référence (URL)</label>
+      <input type="url" name="discord_ref_url" value="{{ module.discord_ref_url or '' }}" placeholder="https://discord.com/channels/…">
       <p class="help">Le mode de travail ({{ 'groupe' if module.is_group_mode else 'individuel' }}) n'est pas modifiable après création.</p>
       <div style="margin-top:12px;">
         <button class="btn" type="submit">Enregistrer</button>
