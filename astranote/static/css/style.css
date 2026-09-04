@@ -277,3 +277,66 @@ details.tool > div { padding: 12px 0; }
 .badge.tie { background: #ede9fe; color: #5b21b6; }
 .empty-rank { text-align: center; padding: 36px 20px; }
 .empty-rank .big { font-size: 46px; }
+/* --------------------------------------------------------------------- */
+/* Page de connexion : thème sombre plein écran                          */
+/* Tout est préfixé .login-page : les autres écrans restent en clair.    */
+/* --------------------------------------------------------------------- */
+body.login-page {
+  min-height: 100vh;
+  color: #e2e8f0;
+  background: var(--bg);
+  /* Halo indigo discret pour éviter un aplat de noir. */
+  background-image:
+    radial-gradient(900px 520px at 50% -12%, #312e81 0%, transparent 62%),
+    linear-gradient(180deg, var(--bg) 0%, #131c31 100%);
+  background-attachment: fixed;
+}
+body.login-page .container { margin: 0 auto; max-width: 460px; }
+
+.login-wrap {
+  min-height: 100vh;
+  display: flex; flex-direction: column; justify-content: center;
+  padding: 32px 0;
+}
+.login-head { text-align: center; margin-bottom: 22px; }
+.login-head img { height: 56px; }
+.login-head p { color: #94a3b8; margin: 10px 0 0; }
+
+.login-page .panel {
+  background: rgba(30, 41, 59, .82);
+  border: 1px solid rgba(148, 163, 184, .18);
+  border-radius: 14px;
+  padding: 26px 24px;
+  box-shadow: 0 24px 60px rgba(2, 6, 23, .55);
+  backdrop-filter: blur(6px);
+}
+.login-page label { color: #94a3b8; }
+.login-page input[type=email],
+.login-page input[type=password] {
+  padding: 10px 12px;
+  color: #f1f5f9;
+  background: rgba(15, 23, 42, .75);
+  border-color: #334155;
+}
+.login-page input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, .35);
+}
+/* Chrome impose un fond clair aux champs auto-remplis : seul le box-shadow
+   interne permet de le recouvrir. */
+.login-page input:-webkit-autofill {
+  -webkit-text-fill-color: #f1f5f9;
+  -webkit-box-shadow: 0 0 0 1000px #16203a inset;
+  caret-color: #f1f5f9;
+}
+.login-page form .btn { width: 100%; margin-top: 18px; padding: 11px 14px; font-size: 14px; }
+
+/* Les fonds pastel des messages éblouissent sur fond sombre. */
+.login-page .flash { border: 1px solid transparent; }
+.login-page .flash.success {
+  background: rgba(22, 163, 74, .16); border-color: rgba(22, 163, 74, .40); color: #86efac;
+}
+.login-page .flash.error {
+  background: rgba(220, 38, 38, .16); border-color: rgba(220, 38, 38, .40); color: #fca5a5;
+}

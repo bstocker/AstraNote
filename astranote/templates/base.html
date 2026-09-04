@@ -8,7 +8,7 @@
   <link rel="icon" href="{{ url_for('static', filename='img/icon.png') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
 {% if current_user.is_authenticated %}
 <header class="topbar">
   <a href="{{ url_for('main.dashboard') }}"><img class="logo" src="{{ url_for('static', filename='img/logo.png') }}" alt="AstraNote"></a>
@@ -32,11 +32,16 @@
 {% endif %}
 
 <main class="container">
+  {# Une page peut vider ce bloc pour placer les messages elle-même : un second
+     appel à get_flashed_messages() renverrait la même liste (cache de requête)
+     et les afficherait en double. #}
+  {% block flashes %}
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% for category, message in messages %}
       <div class="flash {{ category }}">{{ message }}</div>
     {% endfor %}
   {% endwith %}
+  {% endblock %}
   {% block content %}{% endblock %}
 </main>
 

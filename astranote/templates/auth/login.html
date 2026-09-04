@@ -1,26 +1,33 @@
 {% extends "base.html" %}
 {% block title %}Connexion — AstraNote{% endblock %}
+{% block body_class %}login-page{% endblock %}
+
+{# Les messages sont rendus dans la colonne centrée, pas en haut de page. #}
+{% block flashes %}{% endblock %}
+
 {% block content %}
-<div style="max-width: 380px; margin: 6vh auto;">
-  <div style="text-align:center; margin-bottom: 20px;">
-    <img src="{{ url_for('static', filename='img/logo.png') }}" alt="AstraNote" style="height:56px;">
-    <p class="muted">Suivi et notation des étudiants</p>
+<div class="login-wrap">
+  <div class="login-head">
+    <img src="{{ url_for('static', filename='img/logo.png') }}" alt="AstraNote">
+    <p>Suivi et notation des étudiants</p>
   </div>
+
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% for category, message in messages %}
       <div class="flash {{ category }}">{{ message }}</div>
     {% endfor %}
   {% endwith %}
+
   <div class="panel">
     <form method="post">
-<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label>Email</label>
-      <input type="email" name="email" autofocus required>
-      <label>Mot de passe</label>
-      <input type="password" name="password" required>
-      <div style="margin-top:16px;">
-        <button class="btn" type="submit" style="width:100%;">Se connecter</button>
-      </div>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="email">Email</label>
+      <input id="email" type="email" name="email"
+             autocomplete="username" autofocus required>
+      <label for="password">Mot de passe</label>
+      <input id="password" type="password" name="password"
+             autocomplete="current-password" required>
+      <button class="btn" type="submit">Se connecter</button>
     </form>
   </div>
 </div>
