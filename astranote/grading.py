@@ -110,3 +110,26 @@ def compute_module_grades(module, subject_ids, active_ids=None):
             "total": total, "note": note, "is_reference": is_ref, "active": active,
         }
     return result
+
+
+def ranked_places(totals, max_places=5):
+    """Classement par places, ex æquo groupés, limité aux `max_places` premières.
+
+    `totals` : dict sujet -> total d'étoiles. Les sujets à 0 étoile sont écartés
+    (rien de gagné, et cela éviterait un peloton d'ex æquo à 0 en fin de
+    classement). Les places sont **consécutives** : deux premiers ex æquo sont
+    suivis d'une 2e place, pas d'une 3e.
+
+    Retourne une liste de dicts ordonnée : {"place", "total", "ids"}.
+    """
+    scored = {sid: t for sid, t in totals.items() if t > 0}
+    places = []
+    for place, total in enumerate(sorted(set(scored.values()), reverse=True), start=1):
+        if place > max_places:
+            break
+        places.append({
+            "place": place,
+            "total": total,
+            "ids": [sid for sid, t in scored.items() if t == total],
+        })
+    return places

@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Classement — {{ module.name }}{% endblock %}
+
+{# Médaille + libellé ordinal d'une place. #}
+{% macro medal(place) %}{{ {1:'🥇', 2:'🥈', 3:'🥉', 4:'4️⃣', 5:'5️⃣'}[place] }}{% endmacro %}
+{% macro ordinal(place) %}{{ '1re' if place == 1 else place ~ 'e' }}{% endmacro %}
+
+{% macro names(p, labels) %}
+  {% for sid in p.ids %}{{ labels[sid] }}{% if not loop.last %}<br>{% endif %}{% endfor %}
+{% endmacro %}
+
+{% block content %}
+{% set klass = module.klass %}
+<div class="crumbs">
+  <a href="{{ url_for('main.dashboard') }}">Tableau de bord</a> ›
+  <a href="{{ url_for('main.view_class', class_id=klass.id) }}">{{ klass.name }}</a> ›
+  <a href="{{ url_for('modules.view_module', module_id=module.id) }}">{{ module.name }}</a> ›
+  Classement
+</div>
+
+<div class="flex-between">
+  <h1>🏆 Classement — {{ module.name }}</h1>
+  <a class="btn secondary small" href="{{ url_for('modules.view_module', module_id=module.id) }}">← Retour à la grille</a>
+</div>
+<p class="muted">
+  {{ 'Groupes' if module.is_group_mode else 'Étudiants' }} classés à l'étoile, ex æquo compris,
+  jusqu'à la 5<sup>e</sup> place. {{ ranked_count }} sur {{ subject_count }}
+  {{ 'groupes' if module.is_group_mode else 'étudiants actifs' }} ont au moins une étoile.
+</p>
+
+{% if not general %}
+  <div class="panel empty-rank">
+    <div class="big">🌠</div>
+    <p>Aucune étoile saisie pour l'instant : le classement apparaîtra dès la première étoile.</p>
+    <a class="btn" href="{{ url_for('modules.view_module', module_id=module.id) }}">Aller saisir des étoiles</a>
+  </div>
+{% else %}
+
+<!-- ---------------- Classement général ---------------- -->
+<div class="panel">
+  <h2>Classement général <span class="muted" style="font-weight:400; font-size:13px;">· toutes séances confondues</span></h2>
+
+  <div class="podium">
+    {% for place in [2, 1, 3] %}
+      {% set p = general | selectattr('place', 'equalto', place) | first %}
+      {% if p %}
+      <div class="step">
+        <div class="winners">
+          {% if p.ids|length > 1 %}<span class="badge tie">ex æquo</span>{% endif %}
+          <strong>{{ names(p, labels) }}</strong>
+        </div>
+        <div class="block b{{ place }}">
+          <div class="medal">{{ medal(place) }}</div>
+          <div class="rank">{{ ordinal(place) }}</div>
+          <div class="score">{{ p.total }} ★</div>
+        </div>
+      </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+
+  {% set rest = general | selectattr('place', 'greaterthan', 3) | list %}
+  {% if rest %}
+  <ul class="rank-list">
+    {% for p in rest %}
+    <li>
+      <span class="pos">{{ medal(p.place) }} {{ ordinal(p.place) }}</span>
+      <span class="who">{{ names(p, labels) }}
+        {% if p.ids|length > 1 %}<span class="badge tie">ex æquo</span>{% endif %}
+      </span>
+      <span class="pts">{{ p.total }} ★</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</div>
+
+<!-- ---------------- Classement par séance ---------------- -->
+<h2>Par séance</h2>
+<div class="grid-cards">
+  {% for s in sessions %}
+  <div class="card rank-card">
+    <h3>{{ s.date.date.strftime('%d/%m/%Y') if s.date.date else 'Séance' }}
+      {% if s.date.label %}<span class="muted" style="font-weight:400;"> · {{ s.date.label }}</span>{% endif %}
+    </h3>
+    {% if s.places %}
+      <ul class="rank-list compact">
+        {% for p in s.places %}
+        <li>
+          <span class="pos">{{ medal(p.place) }}</span>
+          <span class="who">{{ names(p, labels) }}
+            {% if p.ids|length > 1 %}<span class="badge tie">ex æquo</span>{% endif %}
+          </span>
+          <span class="pts">{{ p.total }} ★</span>
+        </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted" style="margin:8px 0 0;">Aucune étoile sur cette séance.</p>
+    {% endif %}
+  </div>
+  {% else %}
+  <p class="muted">Aucune séance dans ce module.</p>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

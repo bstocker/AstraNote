@@ -97,6 +97,8 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
 
 **R10 — Étudiant neutralisé.** Un étudiant neutralisé (ayant quitté l'école) est **exclu du calcul du prorata** : il n'entre pas dans le total maximum de référence (R3) et n'obtient pas de note d'étoiles (affichée « — »). Les autres étudiants sont notés au prorata du meilleur total **parmi les étudiants actifs**. Ses étoiles restent conservées ; la neutralisation est réversible.
 
+**R11 — Classement.** Un **classement par places** est proposé par module : les sujets sont ordonnés par **total d'étoiles décroissant**. Les **ex æquo partagent la même place** et les places restent **consécutives** (deux 1ers ex æquo sont suivis d'une **2e** place, pas d'une 3e). Le classement s'arrête aux **5 premières places** (une place pouvant compter plusieurs sujets). Les sujets à **0 étoile** ne sont pas classés, et les **étudiants neutralisés** en sont exclus comme du prorata (R10). Le classement est **indicatif** : il n'entre dans aucun calcul de note.
+
 ---
 
 ## 4. Rôles et droits
@@ -191,6 +193,13 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
 - **Avancement de la saisie** : chaque classe affiche une barre indiquant le pourcentage de cellules d'étoiles remplies (sur l'ensemble de ses modules).
 - **Envoi des notes** : sous chaque classe, la liste de ses modules affiche une **coche verte ✔** pour ceux dont les notes ont été envoyées à l'établissement (○ sinon), avec la date/le moyen en infobulle. Chaque module est cliquable.
 - Périmètre respectant les droits (l'enseignant ne voit que ses classes et ses écoles/années plus les communes).
+
+### 5.10bis Dashboard de classement (par module)
+- Accessible depuis le module (bouton **🏆 Classement**).
+- **Podium visuel** des 3 premières places (or / argent / bronze), puis les places **4 et 5** en liste.
+- Un **classement général** (toutes séances confondues) et un **classement par séance**.
+- Ex æquo affichés ensemble sur la même place (badge « ex æquo »), cf. **R11**.
+- En mode groupe, ce sont les **groupes** qui sont classés.
 
 ### 5.10 Recherche d'étudiant
 - **Recherche globale par nom** dans toute la base, depuis n'importe quelle page.

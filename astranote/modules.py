@@ -254,6 +254,50 @@ def view_module(module_id):
 
 
 # --------------------------------------------------------------------------- #
+# Classement du module (podium général + podium par séance)
+# --------------------------------------------------------------------------- #
+@modules_bp.route("/modules/<int:module_id>/ranking")
+@login_required
+def module_ranking(module_id):
+    """Dashboard de classement : les 5 premières places, ex æquo groupés.
+
+    Un classement général (toutes séances confondues) et un classement par
+    séance. Les étudiants neutralisés en sont exclus, comme du prorata (R10).
+    """
+    module = get_module_or_403(module_id)
+    subjects = [s for s in module_subjects(module) if s["active"]]
+    labels = {s["id"]: s["label"] for s in subjects}
+    stype = _subject_type(module)
+
+    # Colonne d'étoiles -> séance, pour ventiler les points en une seule passe.
+    col_date = {sc.id: gd.id for gd in module.grade_dates for sc in gd.star_columns}
+    overall = {sid: 0 for sid in labels}
+    per_date = {gd.id: {sid: 0 for sid in labels} for gd in module.grade_dates}
+
+    if col_date:
+        for st in Star.query.filter(
+            Star.subject_type == stype,
+            Star.star_column_id.in_(col_date)).all():
+            if st.subject_id in overall:
+                pts = grading.token_points(st.value)
+                overall[st.subject_id] += pts
+                per_date[col_date[st.star_column_id]][st.subject_id] += pts
+
+    sessions = [
+        {"date": gd, "places": grading.ranked_places(per_date[gd.id])}
+        for gd in module.grade_dates
+    ]
+    return render_template(
+        "modules/ranking.html",
+        module=module, labels=labels,
+        general=grading.ranked_places(overall),
+        sessions=sessions,
+        ranked_count=sum(1 for t in overall.values() if t > 0),
+        subject_count=len(subjects),
+    )
+
+
+# --------------------------------------------------------------------------- #
 # Dates & colonnes
 # --------------------------------------------------------------------------- #
 @modules_bp.route("/modules/<int:module_id>/dates", methods=["POST"])

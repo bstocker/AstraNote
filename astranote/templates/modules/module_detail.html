@@ -32,11 +32,14 @@
       {% endif %}
     </p>
   </div>
+  <div style="display:flex; gap:8px; align-items:flex-start;">
+  <a class="btn secondary small" href="{{ url_for('modules.module_ranking', module_id=module.id) }}">🏆 Classement</a>
   <form method="post" action="{{ url_for('modules.delete_module', module_id=module.id) }}"
         onsubmit="return confirm('Supprimer ce module ?');">
 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button class="btn danger small" type="submit">Supprimer le module</button>
   </form>
+  </div>
 </div>
 
 <details class="tool">

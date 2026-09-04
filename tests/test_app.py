@@ -523,3 +523,69 @@ def test_export_students_respects_scope(app, admin):
     c = app.test_client()
     login(c, "p@x.fr")
     assert c.get(f"/classes/{cid}/students.xlsx").status_code == 403
+
+
+# --------------------------------------------------------------------------- #
+# Dashboard de classement (podium général + par séance)
+# --------------------------------------------------------------------------- #
+def test_ranked_places_ties_and_cutoff():
+    """Places consécutives, ex æquo groupés, zéros écartés, 5 places max."""
+    totals = {"A": 10, "B": 10, "C": 8, "D": 7, "E": 7, "F": 5, "G": 4, "H": 3, "I": 0}
+    places = grading.ranked_places(totals)
+    assert [(p["place"], sorted(p["ids"]), p["total"]) for p in places] == [
+        (1, ["A", "B"], 10),
+        (2, ["C"], 8),
+        (3, ["D", "E"], 7),
+        (4, ["F"], 5),
+        (5, ["G"], 4),
+    ]
+    assert grading.ranked_places({"A": 0, "B": 0}) == []
+
+
+def test_module_ranking_general_and_per_session(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin, students=("Alice", "Bob", "Chloe"))
+    # Deux séances, une colonne d'étoiles chacune.
+    for d in ("2025-09-30", "2025-10-07"):
+        admin.post(f"/modules/{mid}/dates", data={"date": d})
+    with app.app_context():
+        dids = [g.id for g in GradeDate.query.order_by(GradeDate.position).all()]
+    for did in dids:
+        admin.post(f"/dates/{did}/star-columns", data={"title": "Ex"})
+    with app.app_context():
+        cols = {sc.grade_date_id: sc.id for sc in StarColumn.query.all()}
+
+    # Séance 1 / séance 2 => totaux généraux : Alice 8, Bob 8, Chloe 6.
+    for name, (v1, v2) in {"Alice": (4, 4), "Bob": (4, 4), "Chloe": (4, 2)}.items():
+        admin.post(f"/modules/{mid}/save-star",
+                   json={"subject_id": ids[name], "column_id": cols[dids[0]], "value": str(v1)})
+        admin.post(f"/modules/{mid}/save-star",
+                   json={"subject_id": ids[name], "column_id": cols[dids[1]], "value": str(v2)})
+
+    html = admin.get(f"/modules/{mid}/ranking").get_data(as_text=True)
+    assert "Classement général" in html and "Par séance" in html
+    assert "ex æquo" in html          # Alice et Bob à la 1re place
+    assert "30/09/2025" in html and "07/10/2025" in html
+    # Séance 1 : les trois sont ex æquo à 4★ ; en général Chloe est 2e.
+    assert "6 ★" in html and "8 ★" in html
+
+
+def test_module_ranking_excludes_neutralized(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    _, scid = add_star_column(app, admin, mid)
+    admin.post(f"/modules/{mid}/save-star",
+               json={"subject_id": ids["Alice"], "column_id": scid, "value": "4"})
+    admin.post(f"/modules/{mid}/save-star",
+               json={"subject_id": ids["Bob"], "column_id": scid, "value": "2"})
+    admin.post(f"/enrollments/{enr['Alice']}/toggle-active")
+    html = admin.get(f"/modules/{mid}/ranking").get_data(as_text=True)
+    assert "Alice" not in html and "Bob" in html
+
+
+def test_module_ranking_empty_state_and_scope(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    html = admin.get(f"/modules/{mid}/ranking").get_data(as_text=True)
+    assert "Aucune étoile saisie" in html
+    make_teacher(app, "Prof", "p@x.fr")
+    c = app.test_client()
+    login(c, "p@x.fr")
+    assert c.get(f"/modules/{mid}/ranking").status_code == 403
