@@ -121,6 +121,10 @@ textarea { resize: vertical; }
 .btn.danger { background: #fee2e2; color: var(--red); }
 .btn.danger:hover { background: #fecaca; }
 .btn.small { padding: 4px 9px; font-size: 12px; }
+/* Un <label> stylé en bouton (déclencheur d'un champ fichier masqué) ne doit
+   pas hériter des marges du label de formulaire, sinon il ne s'aligne pas
+   sur les boutons voisins. */
+label.btn { margin: 0; }
 
 table { border-collapse: collapse; width: 100%; }
 .list-table th, .list-table td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); }

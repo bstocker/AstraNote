@@ -67,11 +67,33 @@
   <div class="panel" style="flex:1;">
     <div class="flex-between">
       <h2>Étudiants ({{ klass.enrollments|length }})</h2>
-      {% if klass.enrollments %}
-      <a class="btn secondary small" href="{{ url_for('main.export_students', class_id=klass.id) }}"
-         title="Nom, email, pseudo Discord, lien GitHub et statut">⬇ Exporter (.xlsx)</a>
-      {% endif %}
+      {# align-items:center : sans lui, le <a> s'étire à la hauteur du <form>
+         voisin et les deux boutons n'ont plus ni la même taille ni le même
+         axe. #}
+      <div style="display:flex; gap:6px; flex:0 0 auto; align-items:center;">
+        {% if klass.enrollments %}
+        <a class="btn secondary small" href="{{ url_for('main.export_students', class_id=klass.id) }}"
+           title="Nom, email, pseudo Discord, lien GitHub et statut">⬇ Exporter (.xlsx)</a>
+        {% endif %}
+        {# Le champ fichier est masqué : le label fait office de bouton et le
+           choix du fichier déclenche l'envoi, en un clic comme l'export. #}
+        {# display:contents : le <form> ne crée pas de boîte, le label devient
+           donc un élément frère du lien « Exporter » dans le même flex et les
+           deux boutons ont exactement la même géométrie. #}
+        <form method="post" enctype="multipart/form-data" style="display:contents;"
+              action="{{ url_for('main.import_students', class_id=klass.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <label class="btn secondary small"
+                 title="Fichier au format de l'export : les noms déjà inscrits sont mis à jour, les autres ajoutés. Aucune suppression.">
+            ⬆ Importer (.xlsx)
+            <input type="file" name="file" accept=".xlsx" hidden
+                   onchange="this.form.submit()">
+          </label>
+        </form>
+      </div>
     </div>
+    <p class="help">L'import reconnaît les colonnes à leur intitulé et rapproche
+      les étudiants par leur nom complet (casse et accents ignorés).</p>
     {% for e in klass.enrollments|sort(attribute='student.full_name') %}
       {% set st = e.student %}
       <div class="student-row {{ 'inactive' if not st.active }}">

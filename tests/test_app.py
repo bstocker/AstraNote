@@ -526,6 +526,128 @@ def test_export_students_respects_scope(app, admin):
     assert c.get(f"/classes/{cid}/students.xlsx").status_code == 403
 
 
+def _students_xlsx(rows, headers=None, title_row=True):
+    """Classeur au format de l'export : ligne de titre puis ligne d'en-têtes."""
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    if title_row:
+        ws["A1"] = "Classe : B3 — EPSI · 2025-2026"
+    ws.append(headers or ["Nom complet", "Email", "Pseudo Discord",
+                          "Lien GitHub", "Statut"])
+    for row in rows:
+        ws.append(list(row))
+    out = BytesIO()
+    wb.save(out)
+    out.seek(0)
+    return out
+
+
+def test_import_students_creates_and_updates(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin, students=("Alice",))
+    f = _students_xlsx([
+        ["Alice", "alice@epsi.net", "ali", "https://github.com/alice", "Actif"],
+        ["Hervé Léger", "herve@epsi.net", "hlg", None, "Neutralisé"],
+    ])
+    r = admin.post(f"/classes/{cid}/students/import",
+                   data={"file": (f, "etudiants.xlsx")},
+                   content_type="multipart/form-data", follow_redirects=True)
+    assert "1 étudiant(s) ajouté(s), 1 mis à jour" in r.get_data(as_text=True)
+    with app.app_context():
+        by_name = {e.student.full_name: e.student
+                   for e in db.session.get(Class, cid).enrollments}
+        assert set(by_name) == {"Alice", "Hervé Léger"}
+        assert by_name["Alice"].email == "alice@epsi.net"
+        assert by_name["Alice"].github_url == "https://github.com/alice"
+        assert by_name["Alice"].active is True
+        assert by_name["Hervé Léger"].discord_alias == "hlg"
+        assert by_name["Hervé Léger"].github_url is None
+        assert by_name["Hervé Léger"].active is False
+    # Le bouton est proposé à côté de l'export.
+    assert "students/import" in admin.get(f"/classes/{cid}").get_data(as_text=True)
+
+
+def test_import_students_round_trip(app, admin):
+    """Le fichier produit par l'export se réimporte tel quel dans une autre
+    classe : mêmes intitulés de colonnes, mêmes libellés de statut."""
+    cid, mid, ids, enr = bootstrap_class(app, admin, students=("Zoe", "Alice"))
+    admin.post(f"/enrollments/{enr['Zoe']}/student", data={
+        "full_name": "Zoe", "email": "zoe@x.fr", "discord_alias": "zozo",
+        "github_url": "https://github.com/zoe"})
+    admin.post(f"/enrollments/{enr['Zoe']}/toggle-active")   # neutralisée
+    data = admin.get(f"/classes/{cid}/students.xlsx").data
+
+    with app.app_context():
+        sid, yid = School.query.first().id, AcademicYear.query.first().id
+    admin.post("/classes/new", data={"name": "B2", "school_id": sid,
+                                     "academic_year_id": yid, "teacher_id": 1})
+    with app.app_context():
+        cid2 = Class.query.filter_by(name="B2").first().id
+
+    admin.post(f"/classes/{cid2}/students/import",
+               data={"file": (BytesIO(data), "e.xlsx")},
+               content_type="multipart/form-data")
+    with app.app_context():
+        got = {e.student.full_name: (e.student.email, e.student.discord_alias,
+                                     e.student.active)
+               for e in db.session.get(Class, cid2).enrollments}
+        assert got["Zoe"] == ("zoe@x.fr", "zozo", False)
+        assert got["Alice"] == (None, None, True)
+        # De nouveaux étudiants : la classe d'origine n'est pas touchée.
+        assert Student.query.filter_by(full_name="Zoe").count() == 2
+
+
+def test_import_students_absent_column_keeps_field(app, admin):
+    """Une liste ne contenant que des noms n'efface rien, et le rapprochement
+    ignore la casse et les accents (pas de doublon)."""
+    cid, mid, ids, enr = bootstrap_class(app, admin, students=("Hervé Léger",))
+    admin.post(f"/enrollments/{enr['Hervé Léger']}/student", data={
+        "full_name": "Hervé Léger", "email": "h@x.fr", "discord_alias": "hlg"})
+    f = _students_xlsx([["HERVE LEGER"]], headers=["Nom complet"])
+    admin.post(f"/classes/{cid}/students/import",
+               data={"file": (f, "e.xlsx")}, content_type="multipart/form-data")
+    with app.app_context():
+        enrollments = db.session.get(Class, cid).enrollments
+        assert len(enrollments) == 1                 # mis à jour, pas dupliqué
+        st = enrollments[0].student
+        assert st.full_name == "Hervé Léger"         # nom d'origine conservé
+        assert st.email == "h@x.fr"                  # colonne absente => intact
+
+
+def test_import_students_blank_cell_clears_present_column(app, admin):
+    """À l'inverse, vider une cellule d'une colonne présente efface la valeur :
+    un aller-retour depuis l'export reflète ce qu'on y a effacé."""
+    cid, mid, ids, enr = bootstrap_class(app, admin, students=("Alice",))
+    admin.post(f"/enrollments/{enr['Alice']}/student",
+               data={"full_name": "Alice", "email": "a@x.fr"})
+    f = _students_xlsx([["Alice", None]], headers=["Nom complet", "Email"])
+    admin.post(f"/classes/{cid}/students/import",
+               data={"file": (f, "e.xlsx")}, content_type="multipart/form-data")
+    with app.app_context():
+        assert db.session.get(Student, ids["Alice"]).email is None
+
+
+def test_import_students_scope_and_bad_file(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin, students=("Alice",))
+    make_teacher(app, "Prof", "p@x.fr")
+    c = app.test_client()
+    login(c, "p@x.fr")
+    intrus = _students_xlsx([["Intrus"]], headers=["Nom complet"])
+    assert c.post(f"/classes/{cid}/students/import",
+                  data={"file": (intrus, "e.xlsx")},
+                  content_type="multipart/form-data").status_code == 403
+
+    # Un classeur sans en-tête reconnaissable est refusé sans rien créer.
+    bad = _students_xlsx([["Zoe"]], headers=["Prénom"])
+    r = admin.post(f"/classes/{cid}/students/import",
+                   data={"file": (bad, "e.xlsx")},
+                   content_type="multipart/form-data", follow_redirects=True)
+    assert "introuvable" in r.get_data(as_text=True)
+    with app.app_context():
+        assert Student.query.filter_by(full_name="Zoe").count() == 0
+
+
 # --------------------------------------------------------------------------- #
 # Dashboard de classement (podium général + par séance)
 # --------------------------------------------------------------------------- #

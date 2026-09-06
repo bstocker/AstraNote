@@ -477,8 +477,23 @@ def remove_student(enrollment_id):
 
 
 # --------------------------------------------------------------------------- #
-# Export Excel de la fiche administrative des étudiants d'une classe
+# Export / import Excel de la fiche administrative des étudiants d'une classe
 # --------------------------------------------------------------------------- #
+# En-têtes du classeur, partagés par l'export et l'import. L'import reconnaît
+# les colonnes à leur intitulé : leur ordre est libre, et une colonne absente
+# laisse le champ correspondant inchangé.
+STUDENT_HEADERS = ["Nom complet", "Email", "Pseudo Discord", "Lien GitHub", "Statut"]
+
+# Intitulé normalisé (cf. strip_accents) -> attribut de Student.
+STUDENT_FIELDS = {
+    "email": "email",
+    "pseudo discord": "discord_alias",
+    "lien github": "github_url",
+}
+
+STATUS_ACTIVE, STATUS_INACTIVE = "Actif", "Neutralisé"
+
+
 @main_bp.route("/classes/<int:class_id>/students.xlsx")
 @login_required
 def export_students(class_id):
@@ -515,8 +530,7 @@ def export_students(class_id):
                 f"{klass.academic_year.label}")
     ws["A1"].font = Font(bold=True, size=13)
 
-    headers = ["Nom complet", "Email", "Pseudo Discord", "Lien GitHub", "Statut"]
-    for col_idx, title in enumerate(headers, start=1):
+    for col_idx, title in enumerate(STUDENT_HEADERS, start=1):
         cell = ws.cell(row=2, column=col_idx, value=title)
         cell.font = bold
         cell.fill = grey
@@ -526,7 +540,8 @@ def export_students(class_id):
         ws.cell(row=r, column=2, value=st.email)
         ws.cell(row=r, column=3, value=st.discord_alias)
         ws.cell(row=r, column=4, value=st.github_url)
-        ws.cell(row=r, column=5, value="Actif" if st.active else "Neutralisé")
+        ws.cell(row=r, column=5,
+                value=STATUS_ACTIVE if st.active else STATUS_INACTIVE)
 
     for letter, width in zip("ABCDE", (26, 32, 20, 40, 14)):
         ws.column_dimensions[letter].width = width
@@ -540,6 +555,114 @@ def export_students(class_id):
         bio, as_attachment=True, download_name=f"etudiants_{filename}.xlsx",
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+
+
+def _cell_text(cells, idx):
+    """Texte d'une cellule de la ligne, ou None si vide / colonne absente."""
+    if idx is None or idx >= len(cells):
+        return None
+    value = cells[idx].value
+    if value is None:
+        return None
+    return str(value).strip() or None
+
+
+@main_bp.route("/classes/<int:class_id>/students/import", methods=["POST"])
+@login_required
+def import_students(class_id):
+    """Importe une liste d'étudiants au format de l'export (.xlsx).
+
+    Le rapprochement se fait sur le nom complet, casse et accents ignorés :
+    un étudiant déjà inscrit est mis à jour, un nom inconnu est créé et
+    inscrit dans la classe. Rien n'est jamais supprimé — un étudiant absent
+    du fichier reste dans la classe, ses étoiles intactes.
+
+    Une colonne absente du fichier laisse le champ intact : une liste ne
+    contenant que des noms n'efface donc pas les emails déjà saisis. En
+    revanche, une cellule vide d'une colonne *présente* efface la valeur,
+    pour qu'un aller-retour depuis l'export reflète ce qu'on y a effacé.
+    """
+    from openpyxl import load_workbook
+
+    klass = get_class_or_403(class_id)
+    file = request.files.get("file")
+    if not file or not file.filename.lower().endswith(".xlsx"):
+        flash("Veuillez fournir un fichier .xlsx (au format de l'export).", "error")
+        return redirect(url_for("main.view_class", class_id=class_id))
+
+    try:
+        wb = load_workbook(file, data_only=True)
+    except Exception:
+        flash("Fichier Excel illisible.", "error")
+        return redirect(url_for("main.view_class", class_id=class_id))
+
+    rows = list(wb.active.iter_rows())
+
+    # Ligne d'en-tête : celle qui porte « Nom complet » (l'export la fait
+    # précéder d'une ligne de titre rappelant la classe).
+    headers, header_idx = None, None
+    for i, row in enumerate(rows):
+        values = [strip_accents(str(c.value or "")).strip() for c in row]
+        if "nom complet" in values:
+            headers, header_idx = values, i
+            break
+    if header_idx is None:
+        flash("Colonne « Nom complet » introuvable : utilisez le format de "
+              "l'export.", "error")
+        return redirect(url_for("main.view_class", class_id=class_id))
+
+    name_col = headers.index("nom complet")
+    field_cols = {i: STUDENT_FIELDS[h]
+                  for i, h in enumerate(headers) if h in STUDENT_FIELDS}
+    status_col = headers.index("statut") if "statut" in headers else None
+
+    # Étudiants déjà inscrits, indexés par nom normalisé. Une *liste* par nom :
+    # deux homonymes de la classe sont ainsi appariés aux deux lignes du
+    # fichier, dans l'ordre, au lieu que la seconde ligne réécrive la première.
+    by_name = {}
+    for e in klass.enrollments:
+        by_name.setdefault(strip_accents(e.student.full_name).strip(), []) \
+               .append(e.student)
+
+    created, updated = 0, 0
+    for row in rows[header_idx + 1:]:
+        cells = list(row)
+        full_name = _cell_text(cells, name_col)
+        if not full_name:
+            continue
+
+        pending = by_name.get(strip_accents(full_name).strip())
+        if pending:
+            # Le nom n'est pas réécrit : le rapprochement a réussi, donc seuls
+            # la casse ou les accents pourraient différer — et le fichier n'est
+            # pas plus fiable que la base sur ce point.
+            student = pending.pop(0)
+            updated += 1
+        else:
+            student = Student(full_name=full_name)
+            db.session.add(student)
+            db.session.flush()
+            db.session.add(Enrollment(student_id=student.id, class_id=klass.id))
+            # Un doublon plus bas dans le fichier met à jour ce nouvel étudiant
+            # plutôt que d'en créer un second.
+            by_name.setdefault(strip_accents(full_name).strip(), [])
+            created += 1
+
+        for idx, attr in field_cols.items():
+            setattr(student, attr, _cell_text(cells, idx))
+
+        # Statut : seules les deux valeurs de l'export sont reconnues ; toute
+        # autre (ou une cellule vide) laisse l'étudiant dans son état actuel.
+        status = strip_accents(_cell_text(cells, status_col) or "")
+        if status.startswith(strip_accents(STATUS_INACTIVE)):
+            student.active = False
+        elif status.startswith(strip_accents(STATUS_ACTIVE)):
+            student.active = True
+
+    db.session.commit()
+    flash(f"Import terminé : {created} étudiant(s) ajouté(s), {updated} mis à "
+          f"jour. Aucun étudiant supprimé.", "success")
+    return redirect(url_for("main.view_class", class_id=class_id))
 
 
 # --------------------------------------------------------------------------- #
