@@ -623,8 +623,11 @@ def search():
     results = []
     if raw:
         needle = strip_accents(raw)
-        # Pré-filtre SQL large (insensible à la casse), puis filtre accents en Python.
-        like = f"%{raw}%"
+        # Pas de pré-filtre SQL : le LIKE de SQLite n'ignore pas les accents et
+        # ne replie la casse que pour l'ASCII. Chercher « Herve » (ou « HERVÉ »)
+        # ne ramènerait donc jamais « Hervé », et le filtre Python ci-dessous ne
+        # verrait pas ce candidat. On charge les étudiants du périmètre — au
+        # plus quelques centaines ici — et on compare sur la forme sans accents.
         candidates = (
             Student.query
             .join(Enrollment, Enrollment.student_id == Student.id)
@@ -632,19 +635,16 @@ def search():
         )
         if not current_user.is_admin:
             candidates = candidates.filter(Class.teacher_id == current_user.id)
-        candidates = candidates.filter(
-            or_(Student.full_name.ilike(like), Student.email.ilike(like),
-                Student.discord_alias.ilike(like))
-        ).distinct().all()
+        candidates = candidates.distinct().all()
 
         for student in candidates:
-            if needle not in strip_accents(student.full_name):
-                # Vérifie aussi email / discord sans accents.
-                blob = strip_accents(
-                    f"{student.email or ''} {student.discord_alias or ''}"
-                )
-                if needle not in blob:
-                    continue
+            # Nom, email et pseudo Discord sont cherchés d'un seul tenant.
+            haystack = strip_accents(
+                f"{student.full_name} {student.email or ''} "
+                f"{student.discord_alias or ''}"
+            )
+            if needle not in haystack:
+                continue
             # Rattachements visibles seulement.
             rows = []
             for enr in student.enrollments:

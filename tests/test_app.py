@@ -703,3 +703,43 @@ def test_upload_size_is_capped(app, admin):
                    content_type="multipart/form-data")
     assert r.status_code == 302
     assert "trop volumineux" in admin.get("/", follow_redirects=True).get_data(as_text=True)
+
+
+# --------------------------------------------------------------------------- #
+# Recherche d'étudiant
+# --------------------------------------------------------------------------- #
+def test_search_ignores_case_and_accents(app, admin):
+    """« Herve », « HERVÉ » ou « leger » doivent trouver « Hervé Léger ».
+
+    Le LIKE de SQLite n'ignore pas les accents et ne replie la casse que pour
+    l'ASCII : un pré-filtre SQL sur la chaîne brute écartait ces candidats
+    avant même le filtre sans accents.
+    """
+    bootstrap_class(app, admin, students=("Hervé Léger",))
+    for q in ("Hervé", "Herve", "herve", "HERVÉ", "leger", "LÉGER", "rve lé"):
+        html = admin.get("/search", query_string={"q": q}).get_data(as_text=True)
+        assert "Hervé Léger" in html, q
+
+
+def test_search_matches_email_and_discord(app, admin):
+    cid, _, _, _ = bootstrap_class(app, admin, students=())
+    admin.post(f"/classes/{cid}/students",
+               data={"full_name": "Zoé Martin", "email": "zoe@ecole.fr",
+                     "discord_alias": "Zozo"})
+    for q in ("zoe@ecole", "ZOZO"):
+        html = admin.get("/search", query_string={"q": q}).get_data(as_text=True)
+        assert "Zoé Martin" in html, q
+    # Pas de faux positif : le nom d'un autre étudiant ne doit rien ramener.
+    html = admin.get("/search", query_string={"q": "Alice"}).get_data(as_text=True)
+    assert "Zoé Martin" not in html
+
+
+def test_search_respects_scope(app, admin):
+    """Le pré-filtre SQL supprimé, le cloisonnement repose entièrement sur le
+    join Enrollment/Class : un autre enseignant ne doit toujours rien voir."""
+    bootstrap_class(app, admin, students=("Hervé Léger",))
+    make_teacher(app, "Prof B", "b@x.fr")
+    other = app.test_client()
+    login(other, "b@x.fr")
+    html = other.get("/search", query_string={"q": "herve"}).get_data(as_text=True)
+    assert "Hervé Léger" not in html
