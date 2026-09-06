@@ -138,6 +138,10 @@ textarea { resize: vertical; }
 .btn.secondary:hover { background: #cbd5e1; }
 .btn.danger { background: #fee2e2; color: var(--red); }
 .btn.danger:hover { background: #fecaca; }
+/* Doré : le classement, seul bouton à le porter. Reprend l'ambre des
+   étoiles (--star) plutôt qu'un jaune arbitraire. */
+.btn.gold { background: #fde68a; color: #78350f; }
+.btn.gold:hover { background: #fcd34d; }
 .btn.small { padding: 4px 9px; font-size: 12px; }
 /* Un <label> stylé en bouton (déclencheur d'un champ fichier masqué) ne doit
    pas hériter des marges du label de formulaire, sinon il ne s'aligne pas

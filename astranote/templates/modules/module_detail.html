@@ -33,7 +33,7 @@
     </p>
   </div>
   <div style="display:flex; gap:8px; align-items:flex-start;">
-  <a class="btn secondary small" href="{{ url_for('modules.module_ranking', module_id=module.id) }}">🏆 Classement</a>
+  <a class="btn gold small" href="{{ url_for('modules.module_ranking', module_id=module.id) }}">🏆 Classement</a>
   <form method="post" action="{{ url_for('modules.delete_module', module_id=module.id) }}"
         onsubmit="return confirm('Supprimer ce module ?');">
 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
