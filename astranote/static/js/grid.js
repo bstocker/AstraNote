@@ -23,6 +23,14 @@
 
   const CSRF = (document.querySelector('meta[name="csrf-token"]') || {}).content || "";
 
+  // Sujet visé par une cellule : le type accompagne l'identifiant.
+  function subjectOf(cell) {
+    return {
+      subject_id: Number(cell.dataset.subject),
+      subject_type: cell.dataset.subjectType,
+    };
+  }
+
   async function postJSON(url, payload) {
     const res = await fetch(url, {
       method: "POST",
@@ -44,12 +52,15 @@
     setTimeout(() => { el.style.backgroundColor = prev; }, 350);
   }
 
+  // Les clés sont « type:id » (« group:3 », « student:12 ») : une grille de
+  // module en groupe porte les lignes du groupe et celles de ses membres, et
+  // l'identifiant seul y serait ambigu.
   function refreshGrades(grades) {
     if (!grades) return;
-    Object.keys(grades).forEach((sid) => {
-      const g = grades[sid];
-      const totalCell = grid.querySelector(`[data-total="${sid}"]`);
-      const noteCell = grid.querySelector(`[data-note20="${sid}"]`);
+    Object.keys(grades).forEach((key) => {
+      const g = grades[key];
+      const totalCell = grid.querySelector(`[data-total-key="${key}"]`);
+      const noteCell = grid.querySelector(`[data-note20-key="${key}"]`);
       if (totalCell) totalCell.textContent = g.total;
       if (noteCell) {
         noteCell.textContent = g.note;
@@ -70,7 +81,7 @@
       if (SPECIAL_COLORS[value]) cell.classList.add("st-" + SPECIAL_COLORS[value]);
       try {
         const data = await postJSON(urls.star, {
-          subject_id: Number(cell.dataset.subject),
+          ...subjectOf(cell),
           column_id: Number(cell.dataset.column),
           value: value,
         });
@@ -93,8 +104,10 @@
       } else if (e.key === "Enter") {
         e.preventDefault();
         const col = cell.dataset.column;
+        // offsetParent null = ligne masquée : on saute les membres repliés.
         const all = Array.from(grid.querySelectorAll(
-          `.star-cell[data-column="${col}"] .star-select`));
+          `.star-cell[data-column="${col}"] .star-select`))
+          .filter((s) => s.offsetParent !== null);
         const next = all[all.indexOf(sel) + 1];
         if (next) next.focus();
       }
@@ -107,7 +120,7 @@
       const cell = inp.closest(".note-cell");
       try {
         await postJSON(urls.note, {
-          subject_id: Number(cell.dataset.subject),
+          ...subjectOf(cell),
           column_id: Number(cell.dataset.column),
           value: inp.value,
         });
@@ -122,7 +135,7 @@
       const cell = inp.closest(".url-cell");
       try {
         await postJSON(urls.url, {
-          subject_id: Number(cell.dataset.subject),
+          ...subjectOf(cell),
           column_id: Number(cell.dataset.column),
           value: inp.value,
         });
@@ -137,7 +150,7 @@
       const cell = inp.closest(".comment-cell");
       try {
         await postJSON(urls.comment, {
-          subject_id: Number(cell.dataset.subject),
+          ...subjectOf(cell),
           value: inp.value,
         });
         flash(cell, true);
@@ -153,7 +166,7 @@
         const color = sw.dataset.color;
         try {
           await postJSON(urls.color, {
-            subject_id: Number(cell.dataset.subject),
+            ...subjectOf(cell),
             value: color,
           });
           CELL_COLORS.forEach((c) => cell.classList.remove("col-" + c));
@@ -162,6 +175,17 @@
           sw.classList.add("on");
         } catch (e) { alert(e.message); }
       });
+    });
+  });
+
+  // --- Dépliage d'un groupe : afficher / masquer ses membres ---
+  grid.querySelectorAll(".fold-toggle").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const open = btn.getAttribute("aria-expanded") === "true";
+      btn.setAttribute("aria-expanded", String(!open));
+      btn.textContent = open ? "▸" : "▾";
+      grid.querySelectorAll(`tr.member-row[data-group="${btn.dataset.group}"]`)
+        .forEach((tr) => { tr.hidden = open; });
     });
   });
 

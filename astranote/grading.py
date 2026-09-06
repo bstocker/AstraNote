@@ -112,6 +112,29 @@ def compute_module_grades(module, subject_ids, active_ids=None):
     return result
 
 
+def compute_member_totals(module, student_ids):
+    """Totaux d'étoiles individuels des membres d'un module en groupe (R12).
+
+    Les membres se notent sur **les mêmes colonnes** que leur groupe, mais
+    avec `subject_type = student` : leurs étoiles n'interfèrent donc pas avec
+    le total du groupe. Aucune note /20 n'en est dérivée — la seule note d'un
+    module en groupe reste celle du groupe ; ce total mesure la contribution
+    individuelle au sein du travail collectif.
+    """
+    totals = {sid: 0 for sid in student_ids}
+    column_ids = _star_column_ids(module)
+    if column_ids and student_ids:
+        stars = Star.query.filter(
+            Star.star_column_id.in_(column_ids),
+            Star.subject_type == SUBJECT_STUDENT,
+            Star.subject_id.in_(student_ids),
+        ).all()
+        for s in stars:
+            if s.subject_id in totals:
+                totals[s.subject_id] += token_points(s.value)
+    return totals
+
+
 def ranked_places(totals, max_places=5):
     """Classement par places, ex æquo groupés, limité aux `max_places` premières.
 

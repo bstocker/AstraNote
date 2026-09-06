@@ -97,6 +97,24 @@ table.grid tr.inactive td.subject { color: var(--grey); font-style: italic; }
 table.grid tr.inactive .star-cell .stars,
 table.grid tr.inactive .status-txt { opacity: .5; }
 
+/* Membres d'un groupe déplié : le décalage et le fond plus clair font lire le
+   niveau d'un coup d'œil, sans confondre la ligne du groupe et celle d'un
+   membre — les deux ont exactement les mêmes colonnes de saisie. */
+/* Les :not() écartent les cellules porteuses d'un statut : leur couleur (ABS
+   en rouge, Retard en orange…) est une information, le fond des membres ne
+   doit pas la masquer — il gagnerait sinon en spécificité. */
+table.grid tr.member-row td:not(.st-red):not(.st-orange):not(.st-grey) {
+  background: #fafbff;
+}
+table.grid td.subject.member {
+  padding-left: 30px; font-style: italic; font-weight: 400;
+}
+.fold-toggle {
+  border: none; background: none; cursor: pointer; padding: 0 4px;
+  color: var(--muted); font-size: 12px; line-height: 1;
+}
+.fold-toggle:hover { color: var(--accent); }
+
 /* Forms & buttons */
 label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin: 10px 0 4px; }
 input[type=text], input[type=email], input[type=password], input[type=date],

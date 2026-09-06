@@ -89,7 +89,9 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
 
 **R7 — Calcul par module.** Le calcul du prorata se fait **par module** séparément. Aucune agrégation automatique entre modules.
 
-**R7bis — Modules en groupe.** Si le module est en mode **groupe**, l'unité notée est le **groupe** : étoiles, note d'étoiles, notes manuelles et commentaire portent sur le groupe entier. Le prorata s'applique alors entre **groupes** (le groupe au plus grand total d'étoiles = 20/20). Chaque étudiant hérite de la note et du commentaire de son groupe.
+**R7bis — Modules en groupe.** Si le module est en mode **groupe**, l'unité notée est le **groupe** : étoiles, note d'étoiles, notes manuelles et commentaire portent sur le groupe entier. Le prorata s'applique alors entre **groupes** (le groupe au plus grand total d'étoiles = 20/20). Chaque étudiant hérite de la note et du commentaire de son groupe, et peut en outre être noté **individuellement** (R12).
+
+**R12 — Notation individuelle des membres d'un groupe.** Dans un module en groupe, chaque groupe se **déplie** dans la grille pour faire apparaître ses membres. Un membre se note sur **les mêmes colonnes** que son groupe (étoiles, liens, notes manuelles, commentaire), mais ses étoiles lui sont propres et **n'entrent pas** dans le total du groupe. Un **total d'étoiles individuel** en est tiré, qui mesure la contribution du membre au travail collectif ; **aucune note /20 individuelle n'est calculée** — la seule note d'étoiles d'un module en groupe reste celle du groupe (R7bis), et la colonne « Note /20 » affiche « — » sur une ligne de membre. Un membre neutralisé est grisé et verrouillé comme ailleurs (R10). Les étoiles individuelles suivent l'**étudiant dans le module**, pas le groupe : elles sont conservées s'il change de groupe.
 
 **R8 — Note finale manuelle.** La **note finale n'est pas calculée** par l'application. L'enseignant la saisit lui-même dans une **colonne de note** (« Note CC », « Note Examen »…), car il applique sa propre pondération (note d'étoiles, partiels, appréciation). Plusieurs colonnes de note sont possibles.
 
@@ -155,6 +157,7 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
 - Un groupe porte un nom (ex. « Groupe 1 »).
 - **Étudiants sans groupe** : un encart met en évidence les étudiants **actifs** de la classe **non encore affectés** à un groupe (avec leur nombre), et permet de les affecter directement. Les étudiants **neutralisés** (ayant quitté l'école) n'ont pas besoin de groupe et **n'y figurent pas**. Un message confirme lorsque tous les étudiants actifs sont affectés.
 - La suite du processus est **identique** au mode individuel — étoiles, notes, commentaire — mais s'applique au **groupe entier** (une ligne par groupe au lieu d'une ligne par étudiant).
+- **Dépliage d'un groupe** : un chevron sur la ligne du groupe affiche ses membres (repliés par défaut, le nombre de membres est rappelé à côté du nom). Chaque membre dispose d'une **ligne de saisie complète** — étoiles, liens, notes manuelles, commentaire et couleur de cellule — indépendante de celle du groupe (cf. R12).
 
 ### 5.5 Vue module et saisie des étoiles
 - L'ouverture d'un module affiche un **tableau** unique servant à la fois à **consulter** et à **saisir les étoiles**.
@@ -183,7 +186,8 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
 
 ### 5.8 Export / import Excel des notes
 - **Export** d'un module en `.xlsx` contenant le **nom du module**, le **nom de l'étudiant** (ou du groupe), ses **notes manuelles** (colonnes jaunes) et son **commentaire**.
-- **Import** du même fichier après édition dans Excel : les notes manuelles et commentaires sont **mis à jour**. Le rapprochement se fait sur une colonne `ID` masquée ; les colonnes de note sont reconnues par leur intitulé.
+- En mode **groupe**, chaque groupe est suivi de ses **membres** (indentés), avec leurs propres notes manuelles et commentaires. La colonne `ID` masquée est alors **préfixée** — `G` pour un groupe, `E` pour un étudiant — car l'identifiant seul y serait ambigu.
+- **Import** du même fichier après édition dans Excel : les notes manuelles et commentaires sont **mis à jour**. Le rapprochement se fait sur la colonne `ID` masquée (l'identifiant nu des fichiers antérieurs reste accepté) ; les colonnes de note sont reconnues par leur intitulé.
 - Contrôles à l'import : notes bornées à 0–20 (valeurs invalides signalées et ignorées), étudiants neutralisés exclus, fichier non conforme rejeté.
 - Les étoiles ne sont pas concernées par cet import (elles se saisissent dans la grille).
 

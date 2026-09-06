@@ -65,9 +65,12 @@ def test_prorata_and_rounding(app, admin):
     admin.post(f"/modules/{mid}/save-star", json={"subject_id": ids["Bob"], "column_id": scid, "value": "2"})
     r = admin.post(f"/modules/{mid}/save-star", json={"subject_id": ids["Chloe"], "column_id": scid, "value": "3"})
     g = r.get_json()["grades"]
-    assert g[str(ids["Alice"])]["note"] == 20.0 and g[str(ids["Alice"])]["is_reference"]
-    assert g[str(ids["Bob"])]["note"] == 10.0
-    assert g[str(ids["Chloe"])]["note"] == 15.0
+    # Les grades sont indexés « type:id » (la grille d'un module en groupe
+    # porte à la fois des lignes de groupe et des lignes de membre).
+    assert g[f"student:{ids['Alice']}"]["note"] == 20.0
+    assert g[f"student:{ids['Alice']}"]["is_reference"]
+    assert g[f"student:{ids['Bob']}"]["note"] == 10.0
+    assert g[f"student:{ids['Chloe']}"]["note"] == 15.0
 
 
 def test_round_half():
@@ -96,9 +99,9 @@ def test_neutralized_excluded_and_locked(app, admin):
     # Recalcul : Chloe devient référence, Bob 2/3*20 = 13.5
     r = admin.post(f"/modules/{mid}/save-star", json={"subject_id": ids["Bob"], "column_id": scid, "value": "2"})
     g = r.get_json()["grades"]
-    assert g[str(ids["Alice"])]["note"] == "—"
-    assert g[str(ids["Chloe"])]["note"] == 20.0
-    assert g[str(ids["Bob"])]["note"] == 13.5
+    assert g[f"student:{ids['Alice']}"]["note"] == "—"
+    assert g[f"student:{ids['Chloe']}"]["note"] == 20.0
+    assert g[f"student:{ids['Bob']}"]["note"] == 13.5
 
 
 # --------------------------------------------------------------------------- #
@@ -768,8 +771,8 @@ def test_saisie_rejects_subject_outside_module(app, admin):
 
 
 def test_saisie_rejects_unknown_group(app, admin):
-    """En mode groupe, `_subject_is_active` est toujours vrai : c'est
-    l'appartenance au module qui doit filtrer."""
+    """Un groupe n'est jamais « neutralisé » : c'est l'appartenance au module,
+    contrôlée par `_payload_subject`, qui doit filtrer."""
     cid, mid, ids, enr = bootstrap_class(app, admin, work_mode="group")
     _, scid = add_star_column(app, admin, mid)
     r = admin.post(f"/modules/{mid}/save-star",
@@ -865,3 +868,169 @@ def test_search_respects_scope(app, admin):
     login(other, "b@x.fr")
     html = other.get("/search", query_string={"q": "herve"}).get_data(as_text=True)
     assert "Hervé Léger" not in html
+
+
+# --------------------------------------------------------------------------- #
+# Module en groupe : membres dépliables et notation individuelle
+# --------------------------------------------------------------------------- #
+def bootstrap_group_module(app, admin, students=("Alice", "Bob", "Chloe")):
+    """Module en groupe dont le groupe « G1 » réunit les deux premiers."""
+    cid, mid, ids, enr = bootstrap_class(app, admin, students=students,
+                                         work_mode="group")
+    admin.post(f"/modules/{mid}/groups", data={"name": "G1"})
+    with app.app_context():
+        gid = Group.query.filter_by(name="G1").first().id
+    for name in students[:2]:
+        admin.post(f"/groups/{gid}/members", data={"student_id": ids[name]})
+    return cid, mid, gid, ids, enr
+
+
+def test_grid_renders_foldable_members(app, admin):
+    cid, mid, gid, ids, enr = bootstrap_group_module(app, admin)
+    html = admin.get(f"/modules/{mid}").get_data(as_text=True)
+    grid = html.split("<tbody>")[1].split("</tbody>")[0]
+
+    assert "fold-toggle" in grid                      # le groupe se déplie
+    assert grid.count("member-row") == 2              # une ligne par membre
+    assert grid.count("hidden") == 2                  # repliées par défaut
+    assert "Alice" in grid and "Bob" in grid
+    assert "Chloe" not in grid                        # sans groupe : hors grille
+
+
+def test_member_stars_are_independent_from_group(app, admin):
+    """Le membre se note sur les mêmes colonnes que son groupe, mais avec
+    subject_type=student : les deux totaux ne se mélangent pas."""
+    cid, mid, gid, ids, enr = bootstrap_group_module(app, admin)
+    _, scid = add_star_column(app, admin, mid)
+
+    r = admin.post(f"/modules/{mid}/save-star",
+                   json={"subject_type": "group", "subject_id": gid,
+                         "column_id": scid, "value": "4"})
+    g = r.get_json()["grades"]
+    assert g[f"group:{gid}"]["total"] == 4 and g[f"group:{gid}"]["note"] == 20.0
+
+    r = admin.post(f"/modules/{mid}/save-star",
+                   json={"subject_type": "student", "subject_id": ids["Alice"],
+                         "column_id": scid, "value": "2"})
+    g = r.get_json()["grades"]
+    assert g[f"student:{ids['Alice']}"]["total"] == 2
+    assert g[f"student:{ids['Alice']}"]["note"] == "—"   # pas de /20 individuel
+    assert g[f"student:{ids['Bob']}"]["total"] == 0
+    # La note du groupe n'a pas bougé.
+    assert g[f"group:{gid}"]["total"] == 4 and g[f"group:{gid}"]["note"] == 20.0
+
+
+def test_member_saisie_rejects_non_member(app, admin):
+    """Un étudiant de la classe non affecté au module n'est pas une ligne de
+    la grille : sa saisie créerait une donnée invisible."""
+    cid, mid, gid, ids, enr = bootstrap_group_module(app, admin)
+    _, scid = add_star_column(app, admin, mid)
+    r = admin.post(f"/modules/{mid}/save-star",
+                   json={"subject_type": "student", "subject_id": ids["Chloe"],
+                         "column_id": scid, "value": "3"})
+    assert r.status_code == 400
+    with app.app_context():
+        assert Star.query.filter_by(subject_type="student",
+                                    subject_id=ids["Chloe"]).count() == 0
+
+
+def test_neutralized_member_is_locked(app, admin):
+    cid, mid, gid, ids, enr = bootstrap_group_module(app, admin)
+    _, scid = add_star_column(app, admin, mid)
+    admin.post(f"/enrollments/{enr['Alice']}/toggle-active")
+    r = admin.post(f"/modules/{mid}/save-star",
+                   json={"subject_type": "student", "subject_id": ids["Alice"],
+                         "column_id": scid, "value": "3"})
+    assert r.status_code == 403
+
+
+def test_member_has_full_row(app, admin):
+    """Note manuelle, commentaire et couleur d'un membre, comme un étudiant."""
+    cid, mid, gid, ids, enr = bootstrap_group_module(app, admin)
+    admin.post(f"/modules/{mid}/note-columns", data={"title": "Note CC"})
+    with app.app_context():
+        ncid = NoteColumn.query.first().id
+    member = {"subject_type": "student", "subject_id": ids["Alice"]}
+
+    assert admin.post(f"/modules/{mid}/save-note",
+                      json={**member, "column_id": ncid, "value": "15"}).status_code == 200
+    assert admin.post(f"/modules/{mid}/save-comment",
+                      json={**member, "value": "Moteur du groupe"}).status_code == 200
+    assert admin.post(f"/modules/{mid}/save-color",
+                      json={**member, "value": "green"}).status_code == 200
+
+    with app.app_context():
+        assert NoteValue.query.filter_by(
+            subject_type="student", subject_id=ids["Alice"],
+            note_column_id=ncid).first().score == 15
+        assert Enrollment.query.filter_by(
+            student_id=ids["Alice"],
+            class_id=cid).first().general_comment == "Moteur du groupe"
+        assert SubjectColor.query.filter_by(
+            module_id=mid, subject_type="student",
+            subject_id=ids["Alice"]).first().color == "green"
+
+
+def test_group_export_import_round_trip_with_members(app, admin):
+    cid, mid, gid, ids, enr = bootstrap_group_module(app, admin)
+    admin.post(f"/modules/{mid}/note-columns", data={"title": "Note CC"})
+    with app.app_context():
+        ncid = NoteColumn.query.first().id
+
+    wb = load_workbook(BytesIO(admin.get(f"/modules/{mid}/export.xlsx").data))
+    ws = wb.active
+    tokens = [ws.cell(row=r, column=1).value for r in range(3, ws.max_row + 1)]
+    # Le groupe, puis ses membres : le préfixe lève l'ambiguïté des identifiants.
+    assert tokens == [f"G{gid}", f"E{ids['Alice']}", f"E{ids['Bob']}"]
+    assert ws.cell(row=2, column=2).value == "Groupe / Étudiant"
+
+    for r in range(3, ws.max_row + 1):
+        if ws.cell(row=r, column=1).value == f"E{ids['Alice']}":
+            ws.cell(row=r, column=3).value = 17
+            ws.cell(row=r, column=4).value = "Très impliquée"
+        elif ws.cell(row=r, column=1).value == f"G{gid}":
+            ws.cell(row=r, column=3).value = 12
+    out = BytesIO()
+    wb.save(out)
+    out.seek(0)
+    admin.post(f"/modules/{mid}/import", data={"file": (out, "n.xlsx")},
+               content_type="multipart/form-data")
+
+    with app.app_context():
+        assert NoteValue.query.filter_by(
+            subject_type="student", subject_id=ids["Alice"],
+            note_column_id=ncid).first().score == 17
+        assert NoteValue.query.filter_by(
+            subject_type="group", subject_id=gid,
+            note_column_id=ncid).first().score == 12
+        assert Enrollment.query.filter_by(
+            student_id=ids["Alice"],
+            class_id=cid).first().general_comment == "Très impliquée"
+
+
+def test_import_accepts_legacy_bare_id(app, admin):
+    """Un classeur exporté avant les membres n'a pas de préfixe : l'identifiant
+    nu reste rattaché au type par défaut du module (ici, le groupe)."""
+    from openpyxl import Workbook
+
+    cid, mid, gid, ids, enr = bootstrap_group_module(app, admin)
+    admin.post(f"/modules/{mid}/note-columns", data={"title": "Note CC"})
+    with app.app_context():
+        ncid = NoteColumn.query.first().id
+
+    wb = Workbook()
+    ws = wb.active
+    ws["B1"] = "Module : Crypto"
+    ws.append(["ID", "Groupe", "Note CC", "Commentaire"])
+    ws.append([gid, "G1", 9.5, "Correct"])
+    out = BytesIO()
+    wb.save(out)
+    out.seek(0)
+    admin.post(f"/modules/{mid}/import", data={"file": (out, "n.xlsx")},
+               content_type="multipart/form-data")
+
+    with app.app_context():
+        assert NoteValue.query.filter_by(
+            subject_type="group", subject_id=gid,
+            note_column_id=ncid).first().score == 9.5
+        assert db.session.get(Group, gid).comment == "Correct"

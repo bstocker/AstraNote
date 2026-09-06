@@ -57,9 +57,16 @@ def _next_position(items):
     return (max((i.position or 0) for i in items) + 1) if items else 0
 
 
-def valid_subject_ids(module):
-    """Identifiants des sujets réellement rattachés au module (garde-fou AJAX)."""
-    return {s["id"] for s in module_subjects(module)}
+def valid_subjects(module):
+    """Couples (subject_type, subject_id) réellement notables dans le module.
+
+    Garde-fou des endpoints AJAX : en mode groupe, les groupes **et** leurs
+    membres sont notables ; en mode individuel, seuls les étudiants inscrits.
+    """
+    subjects = {(s["type"], s["id"]) for s in module_subjects(module)}
+    for members in module_members(module).values():
+        subjects |= {(m["type"], m["id"]) for m in members}
+    return subjects
 
 
 def module_subjects(module):
@@ -86,6 +93,36 @@ def module_subjects(module):
          "active": e.student.active, "discord": e.student.discord_alias}
         for e in enrollments
     ]
+
+
+def module_members(module):
+    """Membres de chaque groupe : {group_id: [ligne membre, …]} (mode groupe).
+
+    Une ligne membre a la même forme qu'une ligne étudiant de `module_subjects`
+    et se note sur les mêmes colonnes, avec `subject_type = student`. Le
+    commentaire est celui de l'inscription — le « commentaire général » de
+    l'étudiant dans la classe, partagé avec les autres modules (cf. fiche §5.4).
+
+    Les étudiants neutralisés après leur affectation restent affichés, grisés
+    et verrouillés, comme dans un module individuel.
+    """
+    if not module.is_group_mode:
+        return {}
+    comments = {
+        e.student_id: e.general_comment
+        for e in Enrollment.query.filter_by(class_id=module.class_id).all()
+    }
+    members = {}
+    for group in module.groups:
+        rows = sorted((m.student for m in group.members),
+                      key=lambda st: (not st.active, st.full_name.lower()))
+        members[group.id] = [
+            {"type": SUBJECT_STUDENT, "id": st.id, "label": st.full_name,
+             "comment": comments.get(st.id), "obj": st, "active": st.active,
+             "discord": st.discord_alias, "group_id": group.id}
+            for st in rows
+        ]
+    return members
 
 
 # --------------------------------------------------------------------------- #
@@ -195,11 +232,17 @@ def view_module(module_id):
     active_ids = {s["id"] for s in subjects if s.get("active", True)}
     grades = grading.compute_module_grades(module, subject_ids, active_ids)
 
-    # Index des valeurs pour un accès O(1) dans le template.
-    subject_type = SUBJECT_GROUP if module.is_group_mode else SUBJECT_STUDENT
-    star_map = {}   # (subject_id, star_column_id) -> value
-    url_map = {}    # (subject_id, url_column_id) -> url
-    note_map = {}   # (subject_id, note_column_id) -> score
+    # Membres dépliables et leur total d'étoiles (mode groupe uniquement).
+    members = module_members(module)
+    member_ids = [m["id"] for rows in members.values() for m in rows]
+    member_totals = grading.compute_member_totals(module, member_ids)
+
+    # Index des valeurs pour un accès O(1) dans le template, clé
+    # (subject_type, subject_id, column_id) : une grille de module en groupe
+    # porte à la fois les lignes du groupe et celles de ses membres. Le filtre
+    # sur les colonnes du module suffit à borner la requête, plus besoin de
+    # filtrer sur le type.
+    star_map, url_map, note_map = {}, {}, {}
 
     star_col_ids, url_col_ids = [], []
     for gd in module.grade_dates:
@@ -208,25 +251,19 @@ def view_module(module_id):
     note_col_ids = [c.id for c in module.note_columns]
 
     if star_col_ids:
-        for s in Star.query.filter(
-            Star.subject_type == subject_type,
-            Star.star_column_id.in_(star_col_ids)).all():
-            star_map[(s.subject_id, s.star_column_id)] = s.value
+        for s in Star.query.filter(Star.star_column_id.in_(star_col_ids)).all():
+            star_map[(s.subject_type, s.subject_id, s.star_column_id)] = s.value
     if url_col_ids:
-        for u in UrlValue.query.filter(
-            UrlValue.subject_type == subject_type,
-            UrlValue.url_column_id.in_(url_col_ids)).all():
-            url_map[(u.subject_id, u.url_column_id)] = u.url
+        for u in UrlValue.query.filter(UrlValue.url_column_id.in_(url_col_ids)).all():
+            url_map[(u.subject_type, u.subject_id, u.url_column_id)] = u.url
     if note_col_ids:
         for n in NoteValue.query.filter(
-            NoteValue.subject_type == subject_type,
-            NoteValue.note_column_id.in_(note_col_ids)).all():
-            note_map[(n.subject_id, n.note_column_id)] = n.score
+                NoteValue.note_column_id.in_(note_col_ids)).all():
+            note_map[(n.subject_type, n.subject_id, n.note_column_id)] = n.score
 
     color_map = {
-        c.subject_id: c.color
-        for c in SubjectColor.query.filter_by(
-            module_id=module.id, subject_type=subject_type).all()
+        (c.subject_type, c.subject_id): c.color
+        for c in SubjectColor.query.filter_by(module_id=module.id).all()
     }
 
     # Étudiants actifs encore non affectés à un groupe (mode groupe). Les
@@ -245,6 +282,7 @@ def view_module(module_id):
     return render_template(
         "modules/module_detail.html",
         module=module, subjects=subjects, grades=grades,
+        members=members, member_totals=member_totals,
         star_map=star_map, url_map=url_map, note_map=note_map,
         color_map=color_map, subject_colors=SUBJECT_COLORS,
         color_labels=SUBJECT_COLOR_LABELS,
@@ -597,49 +635,48 @@ def _subject_type(module):
     return SUBJECT_GROUP if module.is_group_mode else SUBJECT_STUDENT
 
 
-def _subject_is_active(module, subject_id):
-    """Un étudiant neutralisé n'accepte plus aucune saisie (les groupes, si.)."""
-    if module.is_group_mode:
-        return True
-    student = db.session.get(Student, subject_id)
-    return bool(student and student.active)
+def _payload_subject(module, data):
+    """Sujet visé par une saisie : ((type, id), None) ou (None, réponse d'erreur).
 
+    Le type accompagne désormais l'identifiant : dans un module en groupe, la
+    grille porte des lignes de groupe **et** des lignes de membre, et
+    `subject_id` seul serait ambigu (le groupe 3 et l'étudiant 3). En son
+    absence on retombe sur le type du module.
 
-def _subject_id(data):
-    """Identifiant de sujet du corps JSON, normalisé en entier.
-
-    None si absent ou non numérique : `_subject_error` répondra « Sujet
-    invalide », comme pour un sujet étranger au module.
+    Le sujet doit être une ligne notable **de ce module** — sans ce contrôle, un
+    identifiant quelconque crée des lignes orphelines, invisibles dans la grille
+    mais comptées ailleurs — et un étudiant neutralisé n'accepte plus de saisie.
     """
+    stype = str(data.get("subject_type") or _subject_type(module))
     try:
-        return int(data.get("subject_id"))
+        sid = int(data.get("subject_id"))
     except (TypeError, ValueError):
-        return None
+        sid = None
 
-
-def _subject_error(module, subject_id):
-    """Réponse d'erreur si le sujet n'accepte pas de saisie, sinon None.
-
-    Le sujet doit être une unité notée **de ce module** — sans ce contrôle, un
-    `subject_id` quelconque crée des lignes orphelines, invisibles dans la
-    grille mais comptées ailleurs (progression du tableau de bord) — et ne doit
-    pas être neutralisé.
-    """
-    if subject_id not in valid_subject_ids(module):
-        return jsonify(error="Sujet invalide"), 400
-    if not _subject_is_active(module, subject_id):
-        return jsonify(error="Étudiant neutralisé : saisie impossible"), 403
-    return None
+    if (stype, sid) not in valid_subjects(module):
+        return None, (jsonify(error="Sujet invalide"), 400)
+    if stype == SUBJECT_STUDENT:
+        student = db.session.get(Student, sid)
+        if not (student and student.active):
+            return None, (jsonify(error="Étudiant neutralisé : saisie impossible"), 403)
+    return (stype, sid), None
 
 
 def _grade_payload(module):
-    """Renvoie totaux + notes /20 recalculés pour tout le module."""
+    """Totaux + notes /20 recalculés pour tout le module, indexés « type:id ».
+
+    Les lignes de membre d'un module en groupe apparaissent avec leur total
+    d'étoiles et un tiret en guise de note : la seule note /20 d'un module en
+    groupe est celle du groupe.
+    """
     subjects = module_subjects(module)
     subject_ids = [s["id"] for s in subjects]
     active_ids = {s["id"] for s in subjects if s.get("active", True)}
     grades = grading.compute_module_grades(module, subject_ids, active_ids)
-    return {
-        str(sid): {
+    stype = _subject_type(module)
+
+    payload = {
+        f"{stype}:{sid}": {
             "total": g["total"],
             # "—" pour un sujet neutralisé, "N/A" si personne n'a d'étoile.
             "note": ("—" if not g["active"] else
@@ -649,13 +686,19 @@ def _grade_payload(module):
         for sid, g in grades.items()
     }
 
+    member_ids = [m["id"] for rows in module_members(module).values() for m in rows]
+    for sid, total in grading.compute_member_totals(module, member_ids).items():
+        payload[f"{SUBJECT_STUDENT}:{sid}"] = {
+            "total": total, "note": "—", "is_reference": False,
+        }
+    return payload
+
 
 @modules_bp.route("/modules/<int:module_id>/save-star", methods=["POST"])
 @login_required
 def save_star(module_id):
     module = get_module_or_403(module_id)
     data = request.get_json(silent=True) or {}
-    subject_id = _subject_id(data)
     column_id = data.get("column_id")
     value = str(data.get("value", "0")).strip()
 
@@ -664,11 +707,10 @@ def save_star(module_id):
     col = db.session.get(StarColumn, column_id)
     if not col or col.grade_date.module_id != module.id:
         return jsonify(error="Colonne invalide"), 400
-    err = _subject_error(module, subject_id)
+    subject, err = _payload_subject(module, data)
     if err:
         return err
-
-    stype = _subject_type(module)
+    stype, subject_id = subject
     star = Star.query.filter_by(
         subject_type=stype, subject_id=subject_id, star_column_id=column_id,
     ).first()
@@ -694,16 +736,16 @@ def save_star(module_id):
 def save_note(module_id):
     module = get_module_or_403(module_id)
     data = request.get_json(silent=True) or {}
-    subject_id = _subject_id(data)
     column_id = data.get("column_id")
     raw = str(data.get("value", "")).strip().replace(",", ".")
 
     col = db.session.get(NoteColumn, column_id)
     if not col or col.module_id != module.id:
         return jsonify(error="Colonne invalide"), 400
-    err = _subject_error(module, subject_id)
+    subject, err = _payload_subject(module, data)
     if err:
         return err
+    stype, subject_id = subject
 
     score = None
     if raw != "":
@@ -714,7 +756,6 @@ def save_note(module_id):
         if not (0 <= score <= 20):
             return jsonify(error="La note doit être entre 0 et 20"), 400
 
-    stype = _subject_type(module)
     nv = NoteValue.query.filter_by(
         subject_type=stype, subject_id=subject_id, note_column_id=column_id,
     ).first()
@@ -734,18 +775,17 @@ def save_note(module_id):
 def save_url(module_id):
     module = get_module_or_403(module_id)
     data = request.get_json(silent=True) or {}
-    subject_id = _subject_id(data)
     column_id = data.get("column_id")
     url = str(data.get("value", "")).strip() or None
 
     col = db.session.get(UrlColumn, column_id)
     if not col or col.grade_date.module_id != module.id:
         return jsonify(error="Colonne invalide"), 400
-    err = _subject_error(module, subject_id)
+    subject, err = _payload_subject(module, data)
     if err:
         return err
+    stype, subject_id = subject
 
-    stype = _subject_type(module)
     uv = UrlValue.query.filter_by(
         subject_type=stype, subject_id=subject_id, url_column_id=column_id,
     ).first()
@@ -765,18 +805,16 @@ def save_url(module_id):
 def save_comment(module_id):
     module = get_module_or_403(module_id)
     data = request.get_json(silent=True) or {}
-    subject_id = _subject_id(data)
     comment = str(data.get("value", "")).strip() or None
 
-    err = _subject_error(module, subject_id)
+    subject, err = _payload_subject(module, data)
     if err:
         return err
+    stype, subject_id = subject
 
-    if module.is_group_mode:
-        group = db.session.get(Group, subject_id)
-        if not group or group.module_id != module.id:
-            return jsonify(error="Groupe invalide"), 400
-        group.comment = comment
+    # Un membre déplié commente comme un étudiant, même en module groupe.
+    if stype == SUBJECT_GROUP:
+        db.session.get(Group, subject_id).comment = comment
     else:
         enr = Enrollment.query.filter_by(
             student_id=subject_id, class_id=module.class_id,
@@ -798,16 +836,15 @@ def save_color(module_id):
     """
     module = get_module_or_403(module_id)
     data = request.get_json(silent=True) or {}
-    subject_id = _subject_id(data)
     color = str(data.get("value", "")).strip()
 
     if color and color not in SUBJECT_COLORS:
         return jsonify(error="Couleur invalide"), 400
-    err = _subject_error(module, subject_id)
+    subject, err = _payload_subject(module, data)
     if err:
         return err
+    stype, subject_id = subject
 
-    stype = _subject_type(module)
     existing = SubjectColor.query.filter_by(
         module_id=module.id, subject_type=stype, subject_id=subject_id,
     ).first()
@@ -834,13 +871,54 @@ def _safe_sheet_title(name):
     return (title or "Notes")[:31]
 
 
-def _export_subjects(module):
-    """Sujets exportables : étudiants actifs (individuel) ou groupes."""
-    return [s for s in module_subjects(module) if s.get("active", True)]
+def _export_rows(module):
+    """Lignes du classeur : chaque unité notée, suivie de ses membres.
+
+    En mode groupe, un groupe est suivi de ses membres actifs, qui portent
+    leurs propres notes manuelles et leur propre commentaire.
+    """
+    members = module_members(module)
+    rows = []
+    for subject in module_subjects(module):
+        if not subject.get("active", True):
+            continue
+        rows.append({**subject, "is_member": False})
+        rows += [{**m, "is_member": True}
+                 for m in members.get(subject["id"], []) if m["active"]]
+    return rows
 
 
-def _set_comment(module, subject_id, comment):
-    if module.is_group_mode:
+def _row_token(module, row):
+    """Valeur de la colonne « ID » masquée d'une ligne du classeur.
+
+    En mode groupe la feuille mêle groupes et membres : l'identifiant seul
+    serait ambigu, on le préfixe donc de G (groupe) ou E (étudiant). En mode
+    individuel l'identifiant nu est conservé, pour que les fichiers déjà
+    exportés restent réimportables.
+    """
+    if not module.is_group_mode:
+        return row["id"]
+    return f"{'E' if row['type'] == SUBJECT_STUDENT else 'G'}{row['id']}"
+
+
+def _parse_token(module, raw):
+    """(subject_type, id) d'une cellule « ID », ou None si illisible.
+
+    Accepte les jetons préfixés et l'identifiant nu des fichiers antérieurs,
+    rattaché au type par défaut du module.
+    """
+    text = str(raw).strip()
+    if len(text) > 1 and text[0].upper() in ("G", "E") and text[1:].isdigit():
+        stype = SUBJECT_GROUP if text[0].upper() == "G" else SUBJECT_STUDENT
+        return stype, int(text[1:])
+    try:
+        return _subject_type(module), int(float(text))
+    except ValueError:
+        return None
+
+
+def _set_comment(module, stype, subject_id, comment):
+    if stype == SUBJECT_GROUP:
         group = db.session.get(Group, subject_id)
         if group and group.module_id == module.id:
             group.comment = comment
@@ -861,17 +939,14 @@ def export_module(module_id):
     from openpyxl.styles import Font, PatternFill, Alignment
 
     module = get_module_or_403(module_id)
-    subjects = _export_subjects(module)
+    rows_data = _export_rows(module)
     note_cols = module.note_columns
-    subject_type = _subject_type(module)
 
     note_map = {}
     if note_cols:
         for n in NoteValue.query.filter(
-            NoteValue.subject_type == subject_type,
-            NoteValue.note_column_id.in_([c.id for c in note_cols])).all():
-            note_map[(n.subject_id, n.note_column_id)] = n.score
-    comment_by_id = {s["id"]: s.get("comment") for s in subjects}
+                NoteValue.note_column_id.in_([c.id for c in note_cols])).all():
+            note_map[(n.subject_type, n.subject_id, n.note_column_id)] = n.score
 
     wb = Workbook()
     ws = wb.active
@@ -886,7 +961,7 @@ def export_module(module_id):
     ws["B1"].font = Font(bold=True, size=13)
 
     # Ligne 2 : en-têtes.
-    label_head = "Groupe" if module.is_group_mode else "Étudiant"
+    label_head = "Groupe / Étudiant" if module.is_group_mode else "Étudiant"
     headers = ["ID", label_head] + [c.title for c in note_cols] + ["Commentaire"]
     for col_idx, title in enumerate(headers, start=1):
         cell = ws.cell(row=2, column=col_idx, value=title)
@@ -896,16 +971,20 @@ def export_module(module_id):
         elif col_idx <= 2:
             cell.fill = grey
 
-    # Données.
-    for r, subj in enumerate(subjects, start=3):
-        ws.cell(row=r, column=1, value=subj["id"])
-        ws.cell(row=r, column=2, value=subj["label"]).font = bold
+    # Données : les membres sont indentés sous leur groupe et en maigre, pour
+    # qu'un coup d'œil suffise à distinguer les deux niveaux.
+    for r, row in enumerate(rows_data, start=3):
+        ws.cell(row=r, column=1, value=_row_token(module, row))
+        label = ws.cell(row=r, column=2, value=row["label"])
+        if row["is_member"]:
+            label.alignment = Alignment(indent=2)
+        else:
+            label.font = bold
         for j, nc in enumerate(note_cols, start=3):
-            v = note_map.get((subj["id"], nc.id))
-            c = ws.cell(row=r, column=j, value=v)
+            c = ws.cell(row=r, column=j,
+                        value=note_map.get((row["type"], row["id"], nc.id)))
             c.fill = yellow
-        ws.cell(row=r, column=3 + len(note_cols),
-                value=comment_by_id.get(subj["id"]))
+        ws.cell(row=r, column=3 + len(note_cols), value=row.get("comment"))
 
     # Mise en forme : colonne ID masquée (ne pas éditer), largeurs, gel.
     ws.column_dimensions["A"].hidden = True
@@ -965,13 +1044,12 @@ def import_module(module_id):
     note_by_title = {c.title: c for c in module.note_columns}
     note_cols_pos = {i: note_by_title[h] for i, h in enumerate(headers) if h in note_by_title}
 
-    subject_type = _subject_type(module)
-    valid_ids = {s["id"] for s in _export_subjects(module)}
+    valid_rows = {(r["type"], r["id"]) for r in _export_rows(module)}
     existing = {
-        (nv.subject_id, nv.note_column_id): nv
+        (nv.subject_type, nv.subject_id, nv.note_column_id): nv
         for nv in NoteValue.query.filter(
-            NoteValue.subject_type == subject_type,
-            NoteValue.note_column_id.in_([c.id for c in module.note_columns] or [0])).all()
+            NoteValue.note_column_id.in_(
+                [c.id for c in module.note_columns] or [0])).all()
     }
 
     n_notes, n_comments, errors = 0, 0, []
@@ -980,12 +1058,10 @@ def import_module(module_id):
         raw_id = cells[id_col].value if id_col < len(cells) else None
         if raw_id in (None, ""):
             continue
-        try:
-            sid = int(raw_id)
-        except (TypeError, ValueError):
+        subject = _parse_token(module, raw_id)
+        if subject is None or subject not in valid_rows:
             continue
-        if sid not in valid_ids:
-            continue
+        stype, sid = subject
 
         # Notes manuelles.
         for pos, nc in note_cols_pos.items():
@@ -1002,12 +1078,12 @@ def import_module(module_id):
                 if not (0 <= score <= 20):
                     errors.append(f"« {nc.title} » ligne ID {sid} : hors 0–20")
                     continue
-            nv = existing.get((sid, nc.id))
+            nv = existing.get((stype, sid, nc.id))
             if nv:
                 nv.score = score
             else:
                 db.session.add(NoteValue(
-                    subject_type=subject_type, subject_id=sid,
+                    subject_type=stype, subject_id=sid,
                     note_column_id=nc.id, score=score,
                 ))
             n_notes += 1
@@ -1015,7 +1091,8 @@ def import_module(module_id):
         # Commentaire.
         if comment_col is not None and comment_col < len(cells):
             cval = cells[comment_col].value
-            _set_comment(module, sid, (str(cval).strip() if cval not in (None, "") else None))
+            _set_comment(module, stype, sid,
+                         str(cval).strip() if cval not in (None, "") else None)
             n_comments += 1
 
     db.session.commit()

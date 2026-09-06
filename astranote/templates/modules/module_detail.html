@@ -105,7 +105,7 @@
          data-save-color="{{ url_for('modules.save_color', module_id=module.id) }}">
     <thead>
       <tr>
-        <th class="subject" rowspan="2">{{ 'Groupe' if module.is_group_mode else 'Étudiant' }}</th>
+        <th class="subject" rowspan="2">{{ 'Groupe / Étudiant' if module.is_group_mode else 'Étudiant' }}</th>
         {% for gd in module.grade_dates %}
           {% set span = gd.star_columns|length + gd.url_columns|length %}
           <th class="date-head" colspan="{{ span if span > 0 else 1 }}">
@@ -157,67 +157,104 @@
         {% endfor %}
       </tr>
     </thead>
+    {#- Une ligne de saisie, utilisée telle quelle pour un groupe et pour un
+        membre déplié : mêmes colonnes, mêmes endpoints, seul le subject_type
+        change. -#}
+    {% macro grid_row(subj, total, note, is_ref, is_member=False, group_id=None) %}
+      {% set scolor = color_map.get((subj.type, subj.id)) %}
+      {#- Classes assemblées ici plutôt qu'en ligne : une expression par classe
+          laisserait des espaces doubles quand la condition est fausse. -#}
+      {% set row_class = (('reference ' if is_ref else '')
+                          ~ ('inactive ' if not subj.active else '')
+                          ~ ('member-row' if is_member else '')).strip() %}
+      {% set subject_class = ('subject'
+                              ~ (' member' if is_member else '')
+                              ~ ((' col-' ~ scolor) if scolor else '')) %}
+      <tr class="{{ row_class }}"
+          {% if is_member %}data-group="{{ group_id }}" hidden{% endif %}>
+        <td class="{{ subject_class }}"
+            data-subject="{{ subj.id }}" data-subject-type="{{ subj.type }}">
+          {% if not is_member and members.get(subj.id) %}
+            <button type="button" class="fold-toggle" data-group="{{ subj.id }}"
+                    aria-expanded="false"
+                    title="Afficher / masquer les membres du groupe">▸</button>
+          {% endif %}
+          {{ subj.label }}
+          {% if not is_member and members.get(subj.id) %}
+            <span class="muted" style="font-size:11px;">({{ members[subj.id]|length }})</span>
+          {% endif %}
+          {% if not subj.active %} <span class="badge neutral">neutralisé</span>{% endif %}
+          {% if subj.discord %}<span class="discord" title="Pseudo Discord">💬 {{ subj.discord }}</span>{% endif %}
+          {% if subj.active %}
+            <span class="color-picker" role="group" aria-label="Couleur de fond">
+              {% for col in subject_colors %}
+                <button type="button" class="swatch sw-{{ col }} {{ 'on' if scolor == col else '' }}"
+                        data-color="{{ col }}" title="{{ color_labels[col] }}"
+                        aria-label="{{ color_labels[col] }}"></button>
+              {% endfor %}
+              <button type="button" class="swatch sw-none {{ 'on' if not scolor else '' }}"
+                      data-color="" title="Aucune couleur" aria-label="Aucune couleur">✕</button>
+            </span>
+          {% endif %}
+        </td>
+        {% for gd in module.grade_dates %}
+          {% for sc in gd.star_columns %}
+            {% set val = star_map.get((subj.type, subj.id, sc.id), '0') %}
+            {% set color = special_statuses.get(val) %}
+            <td class="star-cell {{ 'st-' ~ color if color else '' }}"
+                data-subject="{{ subj.id }}" data-subject-type="{{ subj.type }}"
+                data-column="{{ sc.id }}">
+              <select class="star-select" {{ 'disabled' if not subj.active }}>
+                {% for tok in all_tokens %}
+                  <option value="{{ tok }}" {{ 'selected' if val == tok else '' }}>
+                    {%- if tok in special_statuses -%}{{ tok }}
+                    {%- elif tok == '0' -%}—
+                    {%- else -%}{{ '★' * (tok|int) }}{%- endif -%}
+                  </option>
+                {% endfor %}
+              </select>
+            </td>
+          {% endfor %}
+          {% for uc in gd.url_columns %}
+            {% set uval = url_map.get((subj.type, subj.id, uc.id), '') %}
+            <td class="url-cell" data-subject="{{ subj.id }}"
+                data-subject-type="{{ subj.type }}" data-column="{{ uc.id }}">
+              <input type="url" class="url-input" value="{{ uval or '' }}" placeholder="https://…" {{ 'disabled' if not subj.active }}>
+              {% if uval %}<a href="{{ uval }}" target="_blank" rel="noopener">↗</a>{% endif %}
+            </td>
+          {% endfor %}
+          {% if gd.star_columns|length + gd.url_columns|length == 0 %}<td></td>{% endif %}
+        {% endfor %}
+        <td class="total" data-total-key="{{ subj.type }}:{{ subj.id }}">{{ total }}</td>
+        <td class="note20 {{ 'ref' if is_ref else '' }}" data-note20-key="{{ subj.type }}:{{ subj.id }}"
+            {% if is_member %}title="La note /20 d'un module en groupe est celle du groupe ; le total d'étoiles mesure la contribution du membre."{% endif %}>
+          {{ note }}
+        </td>
+        {% for nc in module.note_columns %}
+          {% set nval = note_map.get((subj.type, subj.id, nc.id)) %}
+          <td class="note-cell" data-subject="{{ subj.id }}"
+              data-subject-type="{{ subj.type }}" data-column="{{ nc.id }}">
+            <input type="number" step="0.5" min="0" max="20" class="note-input"
+                   value="{{ '' if nval is none else nval }}" {{ 'disabled' if not subj.active }}>
+          </td>
+        {% endfor %}
+        <td class="comment-cell" data-subject="{{ subj.id }}"
+            data-subject-type="{{ subj.type }}">
+          <textarea class="comment-input" placeholder="Appréciation…" {{ 'disabled' if not subj.active }}>{{ subj.comment or '' }}</textarea>
+        </td>
+      </tr>
+    {% endmacro %}
     <tbody>
       {% for subj in subjects %}
         {% set g = grades.get(subj.id, {'total':0,'note':none,'is_reference':false}) %}
-        <tr class="{{ 'reference' if g.is_reference else '' }} {{ 'inactive' if not subj.active else '' }}">
-          {% set scolor = color_map.get(subj.id) %}
-          <td class="subject {{ 'col-' ~ scolor if scolor else '' }}" data-subject="{{ subj.id }}">
-            {{ subj.label }}{% if not subj.active %} <span class="badge neutral">neutralisé</span>{% endif %}
-            {% if subj.discord %}<span class="discord" title="Pseudo Discord">💬 {{ subj.discord }}</span>{% endif %}
-            {% if subj.active %}
-              <span class="color-picker" role="group" aria-label="Couleur de fond">
-                {% for col in subject_colors %}
-                  <button type="button" class="swatch sw-{{ col }} {{ 'on' if scolor == col else '' }}"
-                          data-color="{{ col }}" title="{{ color_labels[col] }}"
-                          aria-label="{{ color_labels[col] }}"></button>
-                {% endfor %}
-                <button type="button" class="swatch sw-none {{ 'on' if not scolor else '' }}"
-                        data-color="" title="Aucune couleur" aria-label="Aucune couleur">✕</button>
-              </span>
-            {% endif %}
-          </td>
-          {% for gd in module.grade_dates %}
-            {% for sc in gd.star_columns %}
-              {% set val = star_map.get((subj.id, sc.id), '0') %}
-              {% set color = special_statuses.get(val) %}
-              <td class="star-cell {{ 'st-' ~ color if color else '' }}"
-                  data-subject="{{ subj.id }}" data-column="{{ sc.id }}">
-                <select class="star-select" {{ 'disabled' if not subj.active }}>
-                  {% for tok in all_tokens %}
-                    <option value="{{ tok }}" {{ 'selected' if val == tok else '' }}>
-                      {%- if tok in special_statuses -%}{{ tok }}
-                      {%- elif tok == '0' -%}—
-                      {%- else -%}{{ '★' * (tok|int) }}{%- endif -%}
-                    </option>
-                  {% endfor %}
-                </select>
-              </td>
-            {% endfor %}
-            {% for uc in gd.url_columns %}
-              {% set uval = url_map.get((subj.id, uc.id), '') %}
-              <td class="url-cell" data-subject="{{ subj.id }}" data-column="{{ uc.id }}">
-                <input type="url" class="url-input" value="{{ uval or '' }}" placeholder="https://…" {{ 'disabled' if not subj.active }}>
-                {% if uval %}<a href="{{ uval }}" target="_blank" rel="noopener">↗</a>{% endif %}
-              </td>
-            {% endfor %}
-            {% if gd.star_columns|length + gd.url_columns|length == 0 %}<td></td>{% endif %}
-          {% endfor %}
-          <td class="total" data-total="{{ subj.id }}">{{ g.total }}</td>
-          <td class="note20 {{ 'ref' if g.is_reference else '' }}" data-note20="{{ subj.id }}">
-            {% if not subj.active %}—{% else %}{{ 'N/A' if g.note is none else g.note }}{% endif %}
-          </td>
-          {% for nc in module.note_columns %}
-            {% set nval = note_map.get((subj.id, nc.id)) %}
-            <td class="note-cell" data-subject="{{ subj.id }}" data-column="{{ nc.id }}">
-              <input type="number" step="0.5" min="0" max="20" class="note-input"
-                     value="{{ '' if nval is none else nval }}" {{ 'disabled' if not subj.active }}>
-            </td>
-          {% endfor %}
-          <td class="comment-cell" data-subject="{{ subj.id }}">
-            <textarea class="comment-input" placeholder="Appréciation…" {{ 'disabled' if not subj.active }}>{{ subj.comment or '' }}</textarea>
-          </td>
-        </tr>
+        {{ grid_row(subj, g.total,
+                    '—' if not subj.active else ('N/A' if g.note is none else g.note),
+                    g.is_reference) }}
+        {#- Membres du groupe : masqués tant que le groupe n'est pas déplié. -#}
+        {% for m in members.get(subj.id, []) %}
+          {{ grid_row(m, member_totals.get(m.id, 0), '—', false,
+                      is_member=True, group_id=subj.id) }}
+        {% endfor %}
       {% else %}
         <tr><td class="subject muted">Aucun {{ 'groupe' if module.is_group_mode else 'étudiant' }}.</td>
             <td colspan="99" class="muted">
