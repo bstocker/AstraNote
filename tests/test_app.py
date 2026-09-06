@@ -1034,3 +1034,78 @@ def test_import_accepts_legacy_bare_id(app, admin):
             subject_type="group", subject_id=gid,
             note_column_id=ncid).first().score == 9.5
         assert db.session.get(Group, gid).comment == "Correct"
+
+
+# --------------------------------------------------------------------------- #
+# Script de sauvegarde (scripts/backup_db.py)
+# --------------------------------------------------------------------------- #
+def make_db(path):
+    import sqlite3
+
+    con = sqlite3.connect(path)
+    con.execute("CREATE TABLE t (x)")
+    con.execute("INSERT INTO t VALUES (42)")
+    con.commit()
+    con.close()
+    return path
+
+
+def run_backup(dest, database_uri):
+    """Lance scripts/backup_db.py dans un environnement isolé."""
+    import os
+    import subprocess
+    import sys
+
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    env = {**os.environ,
+           "ASTRANOTE_BACKUP_DIR": str(dest),
+           "ASTRANOTE_DATABASE_URI": database_uri}
+    env.pop("ASTRANOTE_DB_FILE", None)   # on teste bien le chemin par défaut
+    return subprocess.run(
+        [sys.executable, os.path.join(root, "scripts", "backup_db.py")],
+        capture_output=True, text=True, env=env,
+    )
+
+
+def test_backup_script_follows_app_database(tmp_path):
+    """Le script sauvegarde la base que l'application utilise réellement.
+
+    Son chemin par défaut était codé en dur et désaccordé de la configuration :
+    la tâche planifiée ne sauvegardait rien, sans que personne le voie.
+    """
+    import sqlite3
+
+    db = make_db(tmp_path / "astranote.db")
+    dest = tmp_path / "backups"
+    r = run_backup(dest, f"sqlite:///{db}")
+
+    assert r.returncode == 0, r.stderr
+    copies = list(dest.glob("astranote-*.db"))
+    assert len(copies) == 1
+    assert sqlite3.connect(copies[0]).execute("SELECT x FROM t").fetchone() == (42,)
+
+
+def test_backup_script_fails_loudly_when_db_missing(tmp_path):
+    """Une tâche planifiée qui ne sauvegarde rien doit sortir en erreur, sinon
+    l'absence de sauvegarde ne se découvre que le jour où l'on en a besoin."""
+    dest = tmp_path / "backups"
+    r = run_backup(dest, f"sqlite:///{tmp_path / 'absente.db'}")
+
+    assert r.returncode == 1
+    assert "introuvable" in r.stderr
+    assert not list(dest.glob("*.db")) if dest.exists() else True
+
+
+def test_backup_script_keeps_last_14(tmp_path):
+    db = make_db(tmp_path / "astranote.db")
+    dest = tmp_path / "backups"
+    dest.mkdir()
+    for i in range(1, 17):
+        (dest / f"astranote-202601{i:02d}-000000.db").touch()
+
+    r = run_backup(dest, f"sqlite:///{db}")
+    assert r.returncode == 0, r.stderr
+    remaining = sorted(p.name for p in dest.glob("astranote-*.db"))
+    assert len(remaining) == 14
+    assert "astranote-20260101-000000.db" not in remaining   # les plus vieilles
+    assert "astranote-20260116-000000.db" in remaining       # les plus récentes
