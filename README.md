@@ -27,6 +27,8 @@ finales restent saisies à la main par l'enseignant.
   URL**, **colonnes de commentaire libre** (une remarque propre à *cette* séance,
   sans effet sur les étoiles ni sur la note), **colonnes de note manuelles**
   (« Note CC », « Note Examen »…) ; toutes renommables et réordonnables.
+- **En-têtes figés** : la ligne des dates et celle des intitulés de colonnes
+  restent visibles pendant le défilement vertical.
 - **Colonne « Étudiant » / « Groupe » figée** : les séances défilent
   horizontalement sous elle, ce qui écarte les séances anciennes sans jamais
   perdre de vue qui est noté. Barre de défilement dédiée et raccourcis
@@ -50,8 +52,10 @@ finales restent saisies à la main par l'enseignant.
 ### Étudiants
 
 - Ajout et **édition des caractéristiques** (nom, email, pseudo Discord, GitHub).
-- **Neutralisation** réversible d'un étudiant ayant quitté l'école : grisé, saisie
-  verrouillée, exclu du calcul du prorata, ses étoiles conservées.
+- **Neutralisation** réversible d'un étudiant ayant quitté l'école : **retiré des
+  grilles de module**, exclu du calcul du prorata, ses étoiles conservées. Il
+  reste listé (et réactivable) sur la fiche de la classe, et un rappel sous la
+  grille signale combien d'étudiants y sont masqués.
 - **Export et import Excel** de la liste administrative d'une classe.
 - **Recherche globale** d'étudiant, insensible à la casse et aux accents, respectant
   les droits.
@@ -126,7 +130,8 @@ arrondi (R1–R12), la neutralisation, le périmètre écoles/années, le nettoy
 orphelins, le renommage/réordonnancement des colonnes (étoiles, URL, texte,
 notes), les colonnes de commentaire libre et leur purge, l'ordre chronologique
 inverse des séances, les ancres de retour après création, l'édition de module et
-le suivi d'envoi des notes, la facturation, le classement, la progression du tableau
+le suivi d'envoi des notes, le masquage des étudiants neutralisés
+dans la grille (sans perte de leurs étoiles, et saisie toujours refusée), la facturation, le classement, la progression du tableau
 de bord, les couleurs de cellule, la notation individuelle des membres d'un
 groupe, et les aller-retours Excel (notes d'un module, liste des étudiants).
 

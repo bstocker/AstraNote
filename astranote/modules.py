@@ -258,13 +258,26 @@ def delete_module(module_id):
 @login_required
 def view_module(module_id):
     module = get_module_or_403(module_id)
-    subjects = module_subjects(module)
+
+    # La grille ne montre que les étudiants actifs : un étudiant neutralisé a
+    # quitté l'école, il encombrerait la saisie sans jamais pouvoir être noté.
+    # Ses étoiles restent en base, et il reste visible (et réactivable) sur la
+    # fiche de la classe. Le filtrage est **volontairement local à l'affichage** :
+    # `module_subjects` / `module_members` continuent de le connaître, ce qui
+    # permet aux endpoints AJAX de refuser sa saisie avec un message explicite
+    # plutôt qu'un « sujet inconnu ».
+    all_subjects = module_subjects(module)
+    subjects = [s for s in all_subjects if s["active"]]
+    hidden_inactive = len(all_subjects) - len(subjects)
     subject_ids = [s["id"] for s in subjects]
-    active_ids = {s["id"] for s in subjects if s.get("active", True)}
-    grades = grading.compute_module_grades(module, subject_ids, active_ids)
+    grades = grading.compute_module_grades(module, subject_ids, set(subject_ids))
 
     # Membres dépliables et leur total d'étoiles (mode groupe uniquement).
-    members = module_members(module)
+    all_members = module_members(module)
+    members = {gid: [m for m in rows if m["active"]]
+               for gid, rows in all_members.items()}
+    hidden_inactive += (sum(len(r) for r in all_members.values())
+                        - sum(len(r) for r in members.values()))
     member_ids = [m["id"] for rows in members.values() for m in rows]
     member_totals = grading.compute_member_totals(module, member_ids)
 
@@ -333,6 +346,7 @@ def view_module(module_id):
         all_tokens=grading.ALL_TOKENS, special_statuses=grading.SPECIAL_STATUSES,
         unassigned_active=unassigned_active,
         dates_asc=dates_asc, dates_desc=dates_desc, latest_date=latest_date,
+        hidden_inactive=hidden_inactive,
     )
 
 

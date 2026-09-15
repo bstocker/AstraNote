@@ -208,6 +208,19 @@
   // --- Défilement : sauts de séance et retour sur la dernière entrée ---
   const wrap = document.getElementById("gridWrap");
 
+  // Les deux rangées d'en-tête restent visibles pendant le défilement
+  // vertical : la ligne des dates en haut, celle des intitulés juste dessous.
+  // Le décalage de la seconde ne peut pas être écrit en dur — la hauteur de la
+  // première varie avec les libellés de séance.
+  function syncHeadOffset() {
+    const firstRow = grid.querySelector("thead tr");
+    if (!firstRow) return;
+    grid.style.setProperty(
+      "--grid-head-h", firstRow.getBoundingClientRect().height + "px");
+  }
+  syncHeadOffset();
+  window.addEventListener("resize", syncHeadOffset);
+
   function highlight(el) {
     el.classList.add("just-added");
     setTimeout(() => el.classList.remove("just-added"), 1900);

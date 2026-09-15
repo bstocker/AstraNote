@@ -181,8 +181,15 @@ table.grid th, table.grid td {
 }
 table.grid thead th {
   background: #f8fafc; font-weight: 600;
-  position: sticky; top: 0; z-index: 4;   /* en-tête figé au scroll vertical */
+  position: sticky; z-index: 4;   /* en-tête figé au scroll vertical */
 }
+/* L'en-tête tient sur deux rangées : la seconde doit se caler SOUS la
+   première. Sans décalage, les deux collent à 0 et la ligne des dates
+   disparaît derrière celle des intitulés de colonnes. Sa hauteur dépend du
+   contenu (libellé de séance, bouton de suppression) : grid.js la mesure et
+   la publie dans --grid-head-h. */
+table.grid thead tr:first-child th { top: 0; z-index: 5; }
+table.grid thead tr + tr th { top: var(--grid-head-h, 34px); }
 table.grid th.date-head { background: #eef2ff; color: var(--accent-dark); }
 table.grid th.url-head { background: #f0f9ff; color: #0369a1; }
 table.grid th.note-head { background: var(--note-bg); }

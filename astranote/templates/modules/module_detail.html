@@ -308,6 +308,12 @@
   </table>
 </div>
 <p class="help">Cliquez sur une cellule pour saisir 0–4 étoiles ou un statut (ABS, Retard…). La note /20 se recalcule automatiquement (référence = 20/20, prorata arrondi au 0,5).</p>
+{% if hidden_inactive %}
+{#- Dire qu'ils existent, sinon l'enseignant les croit perdus. -#}
+<p class="help">🚫 {{ hidden_inactive }} étudiant(s) neutralisé(s) ne sont pas affichés dans cette grille ;
+  leurs étoiles sont conservées. Réactivez-les depuis
+  <a href="{{ url_for('main.view_class', class_id=klass.id) }}">la fiche de la classe</a>.</p>
+{% endif %}
 
 <!-- ---------------- Outils : dates & colonnes ---------------- -->
 {#- Replié par défaut : on crée une séance de temps en temps, on suit ses

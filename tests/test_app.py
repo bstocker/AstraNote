@@ -1339,3 +1339,65 @@ def test_creation_panels_are_folded_by_default(app, admin):
     html = admin.get(f"/modules/{mid}").get_data(as_text=True)
     assert '<details class="tool" id="tools-build">' in html
     assert "Séances, colonnes &amp; notes" in html
+
+
+# --------------------------------------------------------------------------- #
+# Grille : les étudiants neutralisés n'y figurent plus
+# --------------------------------------------------------------------------- #
+def test_neutralized_student_hidden_from_grid(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    _, scid = add_star_column(app, admin, mid)
+    admin.post(f"/modules/{mid}/save-star", json={
+        "subject_id": ids["Alice"], "column_id": scid, "value": "4"})
+    admin.post(f"/enrollments/{enr['Alice']}/toggle-active")
+
+    html = admin.get(f"/modules/{mid}").get_data(as_text=True)
+    assert f'id="subject-student-{ids["Alice"]}"' not in html
+    assert f'id="subject-student-{ids["Bob"]}"' in html
+    assert "1 étudiant(s) neutralisé(s) ne sont pas affichés" in html
+
+    # Les étoiles d'Alice survivent au masquage, et la classe la montre encore.
+    with app.app_context():
+        assert Star.query.filter_by(
+            subject_type="student", subject_id=ids["Alice"],
+            star_column_id=scid).one().value == "4"
+    assert "Alice" in admin.get(f"/classes/{cid}").get_data(as_text=True)
+
+    # Réactivée, elle réapparaît avec son total intact.
+    admin.post(f"/enrollments/{enr['Alice']}/toggle-active")
+    html = admin.get(f"/modules/{mid}").get_data(as_text=True)
+    assert f'id="subject-student-{ids["Alice"]}"' in html
+    assert "neutralisé(s) ne sont pas affichés" not in html
+
+
+def test_hidden_student_still_refused_with_explicit_message(app, admin):
+    """Masqué ne veut pas dire inconnu : la saisie reste refusée en 403."""
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    _, scid = add_star_column(app, admin, mid)
+    admin.post(f"/enrollments/{enr['Alice']}/toggle-active")
+    r = admin.post(f"/modules/{mid}/save-star", json={
+        "subject_id": ids["Alice"], "column_id": scid, "value": "1"})
+    assert r.status_code == 403
+    assert "neutralis" in r.get_json()["error"]
+
+
+def test_neutralized_group_member_hidden_from_grid(app, admin):
+    cid, mid, gid, ids, enr = bootstrap_group_module(app, admin)
+    html = admin.get(f"/modules/{mid}").get_data(as_text=True)
+    assert f'id="subject-student-{ids["Alice"]}"' in html
+
+    admin.post(f"/enrollments/{enr['Alice']}/toggle-active")
+    html = admin.get(f"/modules/{mid}").get_data(as_text=True)
+    assert f'id="subject-student-{ids["Alice"]}"' not in html
+    # Le groupe, lui, reste noté et affiché.
+    assert f'id="subject-group-{gid}"' in html
+    assert "neutralisé(s) ne sont pas affichés" in html
+
+
+def test_grid_header_rows_are_both_sticky(app, admin):
+    """Ligne des dates et ligne des intitulés : figées, et non superposées."""
+    css = admin.get("/static/css/style.css").get_data(as_text=True)
+    assert "table.grid thead tr:first-child th { top: 0; z-index: 5; }" in css
+    assert "table.grid thead tr + tr th { top: var(--grid-head-h, 34px); }" in css
+    js = admin.get("/static/js/grid.js").get_data(as_text=True)
+    assert '"--grid-head-h"' in js
