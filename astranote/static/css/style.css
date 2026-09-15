@@ -158,7 +158,23 @@ table { border-collapse: collapse; width: 100%; }
 .flash.error { background: #fee2e2; color: #991b1b; }
 
 /* --- Grille de module --- */
-.grid-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
+.grid-wrap {
+  overflow: auto; border: 1px solid var(--border); border-radius: 10px; background: #fff;
+  /* Zone de défilement autonome : la barre horizontale reste visible sans
+     descendre au pied d'une grille de 30 lignes. */
+  max-height: calc(100vh - 170px);
+  overscroll-behavior: contain;
+  scrollbar-color: #94a3b8 #eef2f7;
+}
+.grid-wrap:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Barre de défilement volontairement épaisse et toujours visible (WebKit). */
+.grid-wrap::-webkit-scrollbar { height: 14px; width: 14px; }
+.grid-wrap::-webkit-scrollbar-track { background: #eef2f7; border-radius: 8px; }
+.grid-wrap::-webkit-scrollbar-thumb {
+  background: #94a3b8; border-radius: 8px; border: 3px solid #eef2f7;
+}
+.grid-wrap::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+.grid-wrap::-webkit-scrollbar-corner { background: #eef2f7; }
 table.grid { border-collapse: collapse; font-size: 13px; }
 table.grid th, table.grid td {
   border: 1px solid var(--border); padding: 5px 8px; text-align: center; white-space: nowrap;
@@ -171,10 +187,15 @@ table.grid th.date-head { background: #eef2ff; color: var(--accent-dark); }
 table.grid th.url-head { background: #f0f9ff; color: #0369a1; }
 table.grid th.note-head { background: var(--note-bg); }
 table.grid td.subject, table.grid th.subject {
-  text-align: left; position: sticky; left: 0; background: #fff; z-index: 2;
+  text-align: left; position: sticky; left: 0; background: #fff; z-index: 6;
   min-width: 190px; font-weight: 500;
+  /* Ombre portée : matérialise la limite de la colonne figée quand les
+     séances défilent dessous. */
+  box-shadow: 3px 0 5px -3px rgba(15, 23, 42, .35);
 }
-table.grid thead th.subject { background: #f8fafc; z-index: 3; }
+table.grid thead th.subject { background: #f8fafc; z-index: 7; }
+/* Séance la plus récente : repérable d'un coup d'œil au milieu des autres. */
+table.grid th.date-head.latest { background: #e0e7ff; box-shadow: inset 0 -3px 0 var(--accent); }
 /* Pseudo Discord sous le nom de l'étudiant (repérage pendant la saisie). */
 .discord { display: block; font-weight: 400; font-size: 12px; color: var(--muted); }
 .discord.inline { display: inline; }
@@ -365,4 +386,42 @@ body.login-page .container { margin: 0 auto; max-width: 460px; }
 }
 .login-page .flash.error {
   background: rgba(220, 38, 38, .16); border-color: rgba(220, 38, 38, .40); color: #fca5a5;
+}
+
+/* --------------------------------------------------------------------- */
+/* Navigation entre séances (la colonne « Étudiant » restant figée)        */
+/* --------------------------------------------------------------------- */
+.grid-nav {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-bottom: 8px; padding: 8px 10px;
+  background: #fff; border: 1px solid var(--border); border-radius: 10px;
+}
+.grid-nav-label { font-size: 12px; font-weight: 600; color: var(--muted); }
+.grid-nav-chips { display: flex; gap: 5px; flex-wrap: wrap; flex: 1; min-width: 120px; }
+.grid-nav-actions { display: flex; gap: 6px; flex: 0 0 auto; }
+.chip {
+  font-size: 12px; padding: 3px 9px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border); background: #f8fafc; color: var(--ink);
+}
+.chip:hover { border-color: var(--accent); color: var(--accent); }
+.chip.latest { background: #e0e7ff; border-color: var(--accent); color: var(--accent-dark); font-weight: 700; }
+
+/* Colonne de commentaire libre rattachée à une séance */
+table.grid th.text-head { background: #f5f3ff; color: #6d28d9; }
+td.text-cell { background: #fbfaff; }
+td.text-cell textarea {
+  width: 180px; height: 34px; font-size: 12px; resize: vertical;
+  border: 1px solid var(--border); border-radius: 4px; padding: 3px 5px;
+}
+.tag.text { color: #6d28d9; }
+
+/* Élément qui vient d'être créé / déplacé : signalé au retour sur la grille */
+@keyframes just-added-pulse {
+  0%   { box-shadow: inset 0 0 0 3px var(--accent); }
+  100% { box-shadow: inset 0 0 0 3px rgba(79, 70, 229, 0); }
+}
+.just-added, tr.just-added td { animation: just-added-pulse 1.8s ease-out; }
+
+@media (max-width: 720px) {
+  .grid-wrap { max-height: calc(100vh - 220px); }
 }

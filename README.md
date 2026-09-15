@@ -24,8 +24,16 @@ finales restent saisies à la main par l'enseignant.
 
 - Modules **individuels** ou **en groupe**.
 - **Dates/séances**, **colonnes d'étoiles** (ajoutables à tout moment), **colonnes
-  URL**, **colonnes de note manuelles** (« Note CC », « Note Examen »…) ; toutes
-  renommables et réordonnables.
+  URL**, **colonnes de commentaire libre** (une remarque propre à *cette* séance,
+  sans effet sur les étoiles ni sur la note), **colonnes de note manuelles**
+  (« Note CC », « Note Examen »…) ; toutes renommables et réordonnables.
+- **Colonne « Étudiant » / « Groupe » figée** : les séances défilent
+  horizontalement sous elle, ce qui écarte les séances anciennes sans jamais
+  perdre de vue qui est noté. Barre de défilement dédiée et raccourcis
+  « Aller à la séance », dont la **séance la plus récente**.
+- Les zones de **création** (séances, colonnes, notes, Excel) sont **repliées**
+  par défaut : l'écran est consacré au suivi des étudiants. Après un ajout, la
+  page revient **sur la nouvelle entrée** plutôt qu'en haut de la grille.
 - Saisie immédiate (AJAX) avec **recalcul du prorata en direct** et raccourcis
   clavier (0–4 pour la valeur, Entrée pour descendre d'une ligne).
 - Statuts spéciaux (ABS, Retard, Pas de PC…) affichés en couleur, valant 0 étoile.
@@ -97,7 +105,7 @@ run.py                 Point d'entrée local
 wsgi.py                Point d'entrée WSGI (PythonAnywhere)
 astranote/
   __init__.py          App factory + migrations légères + création admin
-  models.py            Modèle de données (17 tables SQLite)
+  models.py            Modèle de données (19 tables SQLite)
   grading.py           Calcul du prorata /20 et classement (règles R1–R12)
   auth.py              Login / logout / mon compte / comptes enseignants
   main.py              Structure, étudiants, recherche, dashboard, administration
@@ -115,8 +123,10 @@ python -m pytest -q
 
 La suite couvre l'authentification/CSRF et l'open redirect, le prorata et son
 arrondi (R1–R12), la neutralisation, le périmètre écoles/années, le nettoyage des
-orphelins, le renommage/réordonnancement des colonnes, l'édition de module et le
-suivi d'envoi des notes, la facturation, le classement, la progression du tableau
+orphelins, le renommage/réordonnancement des colonnes (étoiles, URL, texte,
+notes), les colonnes de commentaire libre et leur purge, l'ordre chronologique
+inverse des séances, les ancres de retour après création, l'édition de module et
+le suivi d'envoi des notes, la facturation, le classement, la progression du tableau
 de bord, les couleurs de cellule, la notation individuelle des membres d'un
 groupe, et les aller-retours Excel (notes d'un module, liste des étudiants).
 

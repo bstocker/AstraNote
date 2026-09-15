@@ -14,8 +14,9 @@ from flask import (
 from flask_login import login_required, current_user
 
 from .models import (
-    db, Class, Module, GradeDate, StarColumn, UrlColumn, NoteColumn,
-    Student, Enrollment, Group, GroupMember, Star, UrlValue, NoteValue,
+    db, Class, Module, GradeDate, StarColumn, UrlColumn, TextColumn,
+    NoteColumn, Student, Enrollment, Group, GroupMember,
+    Star, UrlValue, TextValue, NoteValue,
     SubjectColor, SUBJECT_COLORS,
     SUBJECT_STUDENT, SUBJECT_GROUP, WORK_MODE_INDIVIDUAL, WORK_MODE_GROUP,
 )
@@ -55,6 +56,32 @@ def get_module_or_403(module_id):
 
 def _next_position(items):
     return (max((i.position or 0) for i in items) + 1) if items else 0
+
+
+def _module_redirect(module, anchor=None):
+    """Retour à la grille, ancré sur l'élément qui vient d'être touché.
+
+    Sans ancre, le navigateur réaffiche la page tout en haut : après l'ajout
+    d'une colonne à la dernière séance, l'enseignant devait re-parcourir toute
+    la grille pour retrouver sa saisie. `grid.js` reprend le fragment pour
+    recentrer aussi le défilement **horizontal**, que l'ancre HTML seule ne
+    déplacerait pas.
+    """
+    return redirect(url_for("modules.view_module", module_id=module.id,
+                            _anchor=anchor))
+
+
+def dates_recent_first(module):
+    """Séances de la plus récente à la plus ancienne.
+
+    Ordre attendu dans le menu d'ajout de colonne : on travaille presque
+    toujours sur la séance du jour, qui doit venir en tête. Une séance sans
+    date n'a pas de place dans un ordre chronologique : elle est reléguée en
+    fin de liste, derrière les séances datées.
+    """
+    dated = sorted((gd for gd in module.grade_dates if gd.date),
+                   key=lambda gd: (gd.date, gd.position or 0), reverse=True)
+    return dated + [gd for gd in module.grade_dates if not gd.date]
 
 
 def valid_subjects(module):
@@ -242,12 +269,13 @@ def view_module(module_id):
     # porte à la fois les lignes du groupe et celles de ses membres. Le filtre
     # sur les colonnes du module suffit à borner la requête, plus besoin de
     # filtrer sur le type.
-    star_map, url_map, note_map = {}, {}, {}
+    star_map, url_map, text_map, note_map = {}, {}, {}, {}
 
-    star_col_ids, url_col_ids = [], []
+    star_col_ids, url_col_ids, text_col_ids = [], [], []
     for gd in module.grade_dates:
         star_col_ids += [c.id for c in gd.star_columns]
         url_col_ids += [c.id for c in gd.url_columns]
+        text_col_ids += [c.id for c in gd.text_columns]
     note_col_ids = [c.id for c in module.note_columns]
 
     if star_col_ids:
@@ -256,6 +284,10 @@ def view_module(module_id):
     if url_col_ids:
         for u in UrlValue.query.filter(UrlValue.url_column_id.in_(url_col_ids)).all():
             url_map[(u.subject_type, u.subject_id, u.url_column_id)] = u.url
+    if text_col_ids:
+        for t in TextValue.query.filter(
+                TextValue.text_column_id.in_(text_col_ids)).all():
+            text_map[(t.subject_type, t.subject_id, t.text_column_id)] = t.content
     if note_col_ids:
         for n in NoteValue.query.filter(
                 NoteValue.note_column_id.in_(note_col_ids)).all():
@@ -279,15 +311,20 @@ def view_module(module_id):
             key=lambda s: s.full_name.lower(),
         )
 
+    # Séances les plus récentes en tête : ordre du menu d'ajout de colonne et
+    # cible du raccourci « aller à la dernière séance » de la grille.
+    dates_desc = dates_recent_first(module)
+
     return render_template(
         "modules/module_detail.html",
         module=module, subjects=subjects, grades=grades,
         members=members, member_totals=member_totals,
-        star_map=star_map, url_map=url_map, note_map=note_map,
+        star_map=star_map, url_map=url_map, text_map=text_map, note_map=note_map,
         color_map=color_map, subject_colors=SUBJECT_COLORS,
         color_labels=SUBJECT_COLOR_LABELS,
         all_tokens=grading.ALL_TOKENS, special_statuses=grading.SPECIAL_STATUSES,
         unassigned_active=unassigned_active,
+        dates_desc=dates_desc, latest_date=(dates_desc[0] if dates_desc else None),
     )
 
 
@@ -359,7 +396,7 @@ def add_date(module_id):
     db.session.add(gd)
     db.session.commit()
     flash("Date/séance ajoutée.", "success")
-    return redirect(url_for("modules.view_module", module_id=module.id))
+    return _module_redirect(module, f"date-{gd.id}")
 
 
 @modules_bp.route("/dates/<int:date_id>/delete", methods=["POST"])
@@ -370,7 +407,7 @@ def delete_date(date_id):
     db.session.delete(gd)
     db.session.commit()
     flash("Date supprimée.", "success")
-    return redirect(url_for("modules.view_module", module_id=module.id))
+    return _module_redirect(module)
 
 
 @modules_bp.route("/dates/<int:date_id>/star-columns", methods=["POST"])
@@ -378,14 +415,15 @@ def delete_date(date_id):
 def add_star_column(date_id):
     gd = db.session.get(GradeDate, date_id) or abort(404)
     module = get_module_or_403(gd.module_id)
-    db.session.add(StarColumn(
+    col = StarColumn(
         grade_date_id=gd.id,
         title=request.form.get("title", "").strip() or "Exercice",
         position=_next_position(gd.star_columns),
-    ))
+    )
+    db.session.add(col)
     db.session.commit()
     flash("Colonne d'étoiles ajoutée.", "success")
-    return redirect(url_for("modules.view_module", module_id=module.id))
+    return _module_redirect(module, f"col-star-{col.id}")
 
 
 @modules_bp.route("/dates/<int:date_id>/url-columns", methods=["POST"])
@@ -393,14 +431,36 @@ def add_star_column(date_id):
 def add_url_column(date_id):
     gd = db.session.get(GradeDate, date_id) or abort(404)
     module = get_module_or_403(gd.module_id)
-    db.session.add(UrlColumn(
+    col = UrlColumn(
         grade_date_id=gd.id,
         title=request.form.get("title", "").strip() or "Lien",
         position=_next_position(gd.url_columns),
-    ))
+    )
+    db.session.add(col)
     db.session.commit()
     flash("Colonne URL ajoutée.", "success")
-    return redirect(url_for("modules.view_module", module_id=module.id))
+    return _module_redirect(module, f"col-url-{col.id}")
+
+
+@modules_bp.route("/dates/<int:date_id>/text-columns", methods=["POST"])
+@login_required
+def add_text_column(date_id):
+    """Colonne de texte libre rattachée à une séance.
+
+    Sert à consigner une remarque propre à *cette* séance, là où le
+    « Commentaire » de fin de ligne vaut pour tout le module.
+    """
+    gd = db.session.get(GradeDate, date_id) or abort(404)
+    module = get_module_or_403(gd.module_id)
+    col = TextColumn(
+        grade_date_id=gd.id,
+        title=request.form.get("title", "").strip() or "Remarque",
+        position=_next_position(gd.text_columns),
+    )
+    db.session.add(col)
+    db.session.commit()
+    flash("Colonne de commentaire ajoutée.", "success")
+    return _module_redirect(module, f"col-text-{col.id}")
 
 
 @modules_bp.route("/star-columns/<int:col_id>/delete", methods=["POST"])
@@ -411,7 +471,7 @@ def delete_star_column(col_id):
     db.session.delete(col)
     db.session.commit()
     flash("Colonne supprimée.", "success")
-    return redirect(url_for("modules.view_module", module_id=module.id))
+    return _module_redirect(module)
 
 
 @modules_bp.route("/url-columns/<int:col_id>/delete", methods=["POST"])
@@ -422,7 +482,18 @@ def delete_url_column(col_id):
     db.session.delete(col)
     db.session.commit()
     flash("Colonne supprimée.", "success")
-    return redirect(url_for("modules.view_module", module_id=module.id))
+    return _module_redirect(module)
+
+
+@modules_bp.route("/text-columns/<int:col_id>/delete", methods=["POST"])
+@login_required
+def delete_text_column(col_id):
+    col = db.session.get(TextColumn, col_id) or abort(404)
+    module = get_module_or_403(col.grade_date.module_id)
+    db.session.delete(col)   # cascade : les TextValue de la colonne partent avec
+    db.session.commit()
+    flash("Colonne supprimée.", "success")
+    return _module_redirect(module)
 
 
 @modules_bp.route("/modules/<int:module_id>/note-columns", methods=["POST"])
@@ -432,14 +503,15 @@ def add_note_column(module_id):
     title = request.form.get("title", "").strip()
     if not title:
         flash("L'intitulé de la colonne de note est requis.", "error")
-        return redirect(url_for("modules.view_module", module_id=module.id))
-    db.session.add(NoteColumn(
+        return _module_redirect(module)
+    col = NoteColumn(
         module_id=module.id, title=title,
         position=_next_position(module.note_columns),
-    ))
+    )
+    db.session.add(col)
     db.session.commit()
     flash("Colonne de note ajoutée.", "success")
-    return redirect(url_for("modules.view_module", module_id=module.id))
+    return _module_redirect(module, f"col-note-{col.id}")
 
 
 @modules_bp.route("/note-columns/<int:col_id>/delete", methods=["POST"])
@@ -450,7 +522,7 @@ def delete_note_column(col_id):
     db.session.delete(col)
     db.session.commit()
     flash("Colonne de note supprimée.", "success")
-    return redirect(url_for("modules.view_module", module_id=module.id))
+    return _module_redirect(module)
 
 
 # --------------------------------------------------------------------------- #
@@ -479,7 +551,7 @@ def rename_star_column(col_id):
         col.title = title
         db.session.commit()
         flash("Colonne renommée.", "success")
-    return redirect(url_for("modules.view_module", module_id=module.id))
+    return _module_redirect(module, f"col-star-{col.id}")
 
 
 @modules_bp.route("/star-columns/<int:col_id>/move", methods=["POST"])
@@ -489,7 +561,7 @@ def move_star_column(col_id):
     module = get_module_or_403(col.grade_date.module_id)
     _reorder(col, col.grade_date.star_columns, request.form.get("dir", "up"))
     db.session.commit()
-    return redirect(url_for("modules.view_module", module_id=module.id))
+    return _module_redirect(module, f"col-star-{col.id}")
 
 
 @modules_bp.route("/url-columns/<int:col_id>/rename", methods=["POST"])
@@ -502,7 +574,7 @@ def rename_url_column(col_id):
         col.title = title
         db.session.commit()
         flash("Colonne renommée.", "success")
-    return redirect(url_for("modules.view_module", module_id=module.id))
+    return _module_redirect(module, f"col-url-{col.id}")
 
 
 @modules_bp.route("/url-columns/<int:col_id>/move", methods=["POST"])
@@ -512,7 +584,30 @@ def move_url_column(col_id):
     module = get_module_or_403(col.grade_date.module_id)
     _reorder(col, col.grade_date.url_columns, request.form.get("dir", "up"))
     db.session.commit()
-    return redirect(url_for("modules.view_module", module_id=module.id))
+    return _module_redirect(module, f"col-url-{col.id}")
+
+
+@modules_bp.route("/text-columns/<int:col_id>/rename", methods=["POST"])
+@login_required
+def rename_text_column(col_id):
+    col = db.session.get(TextColumn, col_id) or abort(404)
+    module = get_module_or_403(col.grade_date.module_id)
+    title = request.form.get("title", "").strip()
+    if title:
+        col.title = title
+        db.session.commit()
+        flash("Colonne renommée.", "success")
+    return _module_redirect(module, f"col-text-{col.id}")
+
+
+@modules_bp.route("/text-columns/<int:col_id>/move", methods=["POST"])
+@login_required
+def move_text_column(col_id):
+    col = db.session.get(TextColumn, col_id) or abort(404)
+    module = get_module_or_403(col.grade_date.module_id)
+    _reorder(col, col.grade_date.text_columns, request.form.get("dir", "up"))
+    db.session.commit()
+    return _module_redirect(module, f"col-text-{col.id}")
 
 
 @modules_bp.route("/note-columns/<int:col_id>/rename", methods=["POST"])
@@ -525,7 +620,7 @@ def rename_note_column(col_id):
         col.title = title
         db.session.commit()
         flash("Colonne renommée.", "success")
-    return redirect(url_for("modules.view_module", module_id=module.id))
+    return _module_redirect(module, f"col-note-{col.id}")
 
 
 @modules_bp.route("/note-columns/<int:col_id>/move", methods=["POST"])
@@ -535,7 +630,7 @@ def move_note_column(col_id):
     module = get_module_or_403(col.module_id)
     _reorder(col, module.note_columns, request.form.get("dir", "up"))
     db.session.commit()
-    return redirect(url_for("modules.view_module", module_id=module.id))
+    return _module_redirect(module, f"col-note-{col.id}")
 
 
 @modules_bp.route("/dates/<int:date_id>/edit", methods=["POST"])
@@ -553,7 +648,7 @@ def edit_date(date_id):
     gd.label = request.form.get("label", "").strip() or None
     db.session.commit()
     flash("Date mise à jour.", "success")
-    return redirect(url_for("modules.view_module", module_id=module.id))
+    return _module_redirect(module, f"date-{gd.id}")
 
 
 @modules_bp.route("/dates/<int:date_id>/move", methods=["POST"])
@@ -563,7 +658,7 @@ def move_date(date_id):
     module = get_module_or_403(gd.module_id)
     _reorder(gd, module.grade_dates, request.form.get("dir", "up"))
     db.session.commit()
-    return redirect(url_for("modules.view_module", module_id=module.id))
+    return _module_redirect(module, f"date-{gd.id}")
 
 
 # --------------------------------------------------------------------------- #
@@ -577,10 +672,12 @@ def add_group(module_id):
         abort(400)
     name = request.form.get("name", "").strip()
     if name:
-        db.session.add(Group(module_id=module.id, name=name))
+        group = Group(module_id=module.id, name=name)
+        db.session.add(group)
         db.session.commit()
         flash("Groupe créé.", "success")
-    return redirect(url_for("modules.view_module", module_id=module.id))
+        return _module_redirect(module, f"subject-group-{group.id}")
+    return _module_redirect(module)
 
 
 @modules_bp.route("/groups/<int:group_id>/members", methods=["POST"])
@@ -600,7 +697,7 @@ def add_group_member(group_id):
             flash("Étudiant affecté au groupe.", "success")
         else:
             flash("Cet étudiant est déjà dans un groupe.", "error")
-    return redirect(url_for("modules.view_module", module_id=module.id))
+    return _module_redirect(module, f"subject-group-{group.id}")
 
 
 @modules_bp.route("/group-members/<int:member_id>/delete", methods=["POST"])
@@ -798,6 +895,44 @@ def save_url(module_id):
         ))
     db.session.commit()
     return jsonify(ok=True, value=url or "")
+
+
+@modules_bp.route("/modules/<int:module_id>/save-text", methods=["POST"])
+@login_required
+def save_text(module_id):
+    """Texte libre d'une cellule de colonne « commentaire de séance ».
+
+    Une valeur vide supprime la ligne plutôt que de stocker une chaîne nulle :
+    seules les remarques réellement saisies restent en base.
+    """
+    module = get_module_or_403(module_id)
+    data = request.get_json(silent=True) or {}
+    column_id = data.get("column_id")
+    content = str(data.get("value", "")).strip() or None
+
+    col = db.session.get(TextColumn, column_id)
+    if not col or col.grade_date.module_id != module.id:
+        return jsonify(error="Colonne invalide"), 400
+    subject, err = _payload_subject(module, data)
+    if err:
+        return err
+    stype, subject_id = subject
+
+    tv = TextValue.query.filter_by(
+        subject_type=stype, subject_id=subject_id, text_column_id=column_id,
+    ).first()
+    if content is None:
+        if tv:
+            db.session.delete(tv)
+    elif tv:
+        tv.content = content
+    else:
+        db.session.add(TextValue(
+            subject_type=stype, subject_id=subject_id,
+            text_column_id=column_id, content=content,
+        ))
+    db.session.commit()
+    return jsonify(ok=True, value=content or "")
 
 
 @modules_bp.route("/modules/<int:module_id>/save-comment", methods=["POST"])

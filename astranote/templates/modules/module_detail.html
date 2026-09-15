@@ -42,7 +42,7 @@
   </div>
 </div>
 
-<details class="tool">
+<details class="tool" id="tools-edit">
   <summary>⚙ Éditer le module</summary>
   <div class="panel" style="max-width:620px;">
     <form method="post" action="{{ url_for('modules.edit_module', module_id=module.id) }}">
@@ -61,7 +61,7 @@
   </div>
 </details>
 
-<details class="tool"{% if request.args.get('envoi') %} open{% endif %}>
+<details class="tool" id="tools-send"{% if request.args.get('envoi') %} open{% endif %}>
   <summary>📤 Envoi des notes à l'établissement</summary>
   <div class="panel" style="max-width:620px;">
     <form method="post" action="{{ url_for('modules.set_notes_sent', module_id=module.id) }}">
@@ -96,19 +96,43 @@
 {% endif %}
 
 <!-- ---------------- Grille ---------------- -->
-<div class="grid-wrap">
+{% if module.grade_dates %}
+{#- Raccourcis de défilement : la colonne « Étudiant » restant figée, sauter à
+    une séance revient à masquer les précédentes sans rien perdre du repérage. -#}
+<div class="grid-nav">
+  <span class="grid-nav-label">Aller à la séance</span>
+  <div class="grid-nav-chips">
+    {% for gd in dates_desc %}
+      <button type="button" class="chip{{ ' latest' if loop.first else '' }}"
+              data-jump="date-{{ gd.id }}"
+              title="{{ gd.date.strftime('%d/%m/%Y') if gd.date else 'Sans date' }}{% if gd.label %} · {{ gd.label }}{% endif %}">
+        {{ gd.date.strftime('%d/%m/%y') if gd.date else '—' }}{% if loop.first and gd.date %} ★{% endif %}
+      </button>
+    {% endfor %}
+  </div>
+  <div class="grid-nav-actions">
+    <button type="button" class="btn secondary small" data-jump="__start__" title="Revenir à la première séance">⇤ Début</button>
+    {% if latest_date %}
+    <button type="button" class="btn small" data-jump="date-{{ latest_date.id }}" title="Aller à la séance la plus récente">Dernière séance ⇥</button>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+<div class="grid-wrap" id="gridWrap" tabindex="0">
   <table class="grid" id="grid"
          data-save-star="{{ url_for('modules.save_star', module_id=module.id) }}"
          data-save-note="{{ url_for('modules.save_note', module_id=module.id) }}"
          data-save-url="{{ url_for('modules.save_url', module_id=module.id) }}"
+         data-save-text="{{ url_for('modules.save_text', module_id=module.id) }}"
          data-save-comment="{{ url_for('modules.save_comment', module_id=module.id) }}"
          data-save-color="{{ url_for('modules.save_color', module_id=module.id) }}">
     <thead>
       <tr>
         <th class="subject" rowspan="2">{{ 'Groupe / Étudiant' if module.is_group_mode else 'Étudiant' }}</th>
         {% for gd in module.grade_dates %}
-          {% set span = gd.star_columns|length + gd.url_columns|length %}
-          <th class="date-head" colspan="{{ span if span > 0 else 1 }}">
+          {% set span = gd.star_columns|length + gd.url_columns|length + gd.text_columns|length %}
+          <th class="date-head{{ ' latest' if latest_date and gd.id == latest_date.id else '' }}"
+              id="date-{{ gd.id }}" colspan="{{ span if span > 0 else 1 }}">
             {{ gd.date.strftime('%d/%m/%Y') if gd.date else '' }}{% if gd.label %} · {{ gd.label }}{% endif %}
             <form method="post" action="{{ url_for('modules.delete_date', date_id=gd.id) }}" style="display:inline;"
                   onsubmit="return confirm('Supprimer cette date et ses colonnes ?');">
@@ -120,7 +144,7 @@
         <th class="total" rowspan="2">Total ★</th>
         <th class="note20" rowspan="2">Note /20</th>
         {% for nc in module.note_columns %}
-          <th class="note-head" rowspan="2">
+          <th class="note-head" rowspan="2" id="col-note-{{ nc.id }}">
             {{ nc.title }}
             <form method="post" action="{{ url_for('modules.delete_note_column', col_id=nc.id) }}" style="display:inline;"
                   onsubmit="return confirm('Supprimer cette colonne de note ?');">
@@ -134,7 +158,7 @@
       <tr>
         {% for gd in module.grade_dates %}
           {% for sc in gd.star_columns %}
-            <th>{{ sc.title }}
+            <th id="col-star-{{ sc.id }}">{{ sc.title }}
               <form method="post" action="{{ url_for('modules.delete_star_column', col_id=sc.id) }}" style="display:inline;"
                     onsubmit="return confirm('Supprimer cette colonne ?');">
 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -143,7 +167,7 @@
             </th>
           {% endfor %}
           {% for uc in gd.url_columns %}
-            <th class="url-head">{{ uc.title }} 🔗
+            <th class="url-head" id="col-url-{{ uc.id }}">{{ uc.title }} 🔗
               <form method="post" action="{{ url_for('modules.delete_url_column', col_id=uc.id) }}" style="display:inline;"
                     onsubmit="return confirm('Supprimer cette colonne ?');">
 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -151,7 +175,16 @@
               </form>
             </th>
           {% endfor %}
-          {% if gd.star_columns|length + gd.url_columns|length == 0 %}
+          {% for tc in gd.text_columns %}
+            <th class="text-head" id="col-text-{{ tc.id }}">{{ tc.title }} 📝
+              <form method="post" action="{{ url_for('modules.delete_text_column', col_id=tc.id) }}" style="display:inline;"
+                    onsubmit="return confirm('Supprimer cette colonne de commentaire ?');">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn danger small" type="submit">✕</button>
+              </form>
+            </th>
+          {% endfor %}
+          {% if gd.star_columns|length + gd.url_columns|length + gd.text_columns|length == 0 %}
             <th class="muted" style="font-weight:400;">—</th>
           {% endif %}
         {% endfor %}
@@ -170,7 +203,7 @@
       {% set subject_class = ('subject'
                               ~ (' member' if is_member else '')
                               ~ ((' col-' ~ scolor) if scolor else '')) %}
-      <tr class="{{ row_class }}"
+      <tr class="{{ row_class }}" id="subject-{{ subj.type }}-{{ subj.id }}"
           {% if is_member %}data-group="{{ group_id }}" hidden{% endif %}>
         <td class="{{ subject_class }}"
             data-subject="{{ subj.id }}" data-subject-type="{{ subj.type }}">
@@ -223,7 +256,14 @@
               {% if uval %}<a href="{{ uval }}" target="_blank" rel="noopener">↗</a>{% endif %}
             </td>
           {% endfor %}
-          {% if gd.star_columns|length + gd.url_columns|length == 0 %}<td></td>{% endif %}
+          {% for tc in gd.text_columns %}
+            {% set tval = text_map.get((subj.type, subj.id, tc.id), '') %}
+            <td class="text-cell" data-subject="{{ subj.id }}"
+                data-subject-type="{{ subj.type }}" data-column="{{ tc.id }}">
+              <textarea class="text-input" placeholder="Remarque…" {{ 'disabled' if not subj.active }}>{{ tval or '' }}</textarea>
+            </td>
+          {% endfor %}
+          {% if gd.star_columns|length + gd.url_columns|length + gd.text_columns|length == 0 %}<td></td>{% endif %}
         {% endfor %}
         <td class="total" data-total-key="{{ subj.type }}:{{ subj.id }}">{{ total }}</td>
         <td class="note20 {{ 'ref' if is_ref else '' }}" data-note20-key="{{ subj.type }}:{{ subj.id }}"
@@ -267,6 +307,11 @@
 <p class="help">Cliquez sur une cellule pour saisir 0–4 étoiles ou un statut (ABS, Retard…). La note /20 se recalcule automatiquement (référence = 20/20, prorata arrondi au 0,5).</p>
 
 <!-- ---------------- Outils : dates & colonnes ---------------- -->
+{#- Replié par défaut : on crée une séance de temps en temps, on suit ses
+    étudiants en permanence. `grid.js` mémorise l'état ouvert/fermé pour que
+    l'ajout de plusieurs colonnes d'affilée ne referme pas le panneau. -#}
+<details class="tool" id="tools-build">
+  <summary>➕ Séances, colonnes &amp; notes</summary>
 <div class="row">
   <div class="panel" style="flex:1;">
     <h2>Ajouter une date / séance</h2>
@@ -281,22 +326,30 @@
     <h2>Ajouter une colonne à une date</h2>
     <form method="post" id="addColForm" class="inline-form"
           data-star-action="{{ url_for('modules.add_star_column', date_id=0) }}"
-          data-url-action="{{ url_for('modules.add_url_column', date_id=0) }}">
+          data-url-action="{{ url_for('modules.add_url_column', date_id=0) }}"
+          data-text-action="{{ url_for('modules.add_text_column', date_id=0) }}">
 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div><label>Date</label>
+        {#- La plus récente en tête : c'est presque toujours celle qu'on vise. -#}
         <select id="colDate">
-          {% for gd in module.grade_dates %}
-          <option value="{{ gd.id }}">{{ gd.date.strftime('%d/%m/%Y') if gd.date else '' }}{% if gd.label %} · {{ gd.label }}{% endif %}</option>
+          {% for gd in dates_desc %}
+          <option value="{{ gd.id }}">{{ gd.date.strftime('%d/%m/%Y') if gd.date else 'Sans date' }}{% if gd.label %} · {{ gd.label }}{% endif %}{% if loop.first and gd.date %} (la plus récente){% endif %}</option>
           {% endfor %}
         </select>
       </div>
       <div><label>Type</label>
-        <select id="colType"><option value="star">Étoiles</option><option value="url">Lien (URL)</option></select>
+        <select id="colType">
+          <option value="star">Étoiles</option>
+          <option value="url">Lien (URL)</option>
+          <option value="text">Commentaire libre</option>
+        </select>
       </div>
       <div><label>Intitulé</label><input type="text" id="colTitle" placeholder="CMAKE, Projet, dépôt GitHub…"></div>
       <div style="flex:0 0 auto;"><button class="btn" type="submit">Ajouter la colonne</button></div>
     </form>
-    <p class="help">Vous pouvez ajouter une colonne d'étoiles à tout moment, y compris sur une date existante.</p>
+    <p class="help">Vous pouvez ajouter une colonne à tout moment, y compris sur une date existante.
+      Une colonne <strong>commentaire libre</strong> reçoit du texte propre à cette séance,
+      sans incidence sur les étoiles ni sur la note /20.</p>
     {% endif %}
   </div>
 
@@ -321,10 +374,11 @@
     <p class="help">⚠ Ne modifiez pas la colonne « ID » (masquée) ni les intitulés de colonnes du fichier.</p>
   </div>
 </div>
+</details>
 
 <!-- ---------------- Gérer dates & colonnes ---------------- -->
 {% if module.grade_dates or module.note_columns %}
-<details class="tool">
+<details class="tool" id="tools-manage">
   <summary>⚙ Renommer / réorganiser les dates &amp; colonnes</summary>
   <div class="panel">
     {% macro mv(action, cid, dir, label) %}
@@ -372,6 +426,18 @@
           </form>
           {{ mv(url_for('modules.move_url_column', col_id=uc.id), uc.id, 'up', 'Gauche') }}
           {{ mv(url_for('modules.move_url_column', col_id=uc.id), uc.id, 'down', 'Droite') }}
+        </li>
+        {% endfor %}
+        {% for tc in gd.text_columns %}
+        <li>
+          <span class="tag text">📝</span>
+          <form method="post" action="{{ url_for('modules.rename_text_column', col_id=tc.id) }}" class="inline-form" style="display:inline-flex;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="text" name="title" value="{{ tc.title }}">
+            <button class="btn small" type="submit">OK</button>
+          </form>
+          {{ mv(url_for('modules.move_text_column', col_id=tc.id), tc.id, 'up', 'Gauche') }}
+          {{ mv(url_for('modules.move_text_column', col_id=tc.id), tc.id, 'down', 'Droite') }}
         </li>
         {% endfor %}
       </ul>

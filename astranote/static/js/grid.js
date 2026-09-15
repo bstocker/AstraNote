@@ -9,6 +9,7 @@
     star: grid.dataset.saveStar,
     note: grid.dataset.saveNote,
     url: grid.dataset.saveUrl,
+    text: grid.dataset.saveText,
     comment: grid.dataset.saveComment,
     color: grid.dataset.saveColor,
   };
@@ -144,6 +145,21 @@
     });
   });
 
+  // --- Commentaire libre d'une séance ---
+  grid.querySelectorAll(".text-input").forEach((inp) => {
+    inp.addEventListener("change", async () => {
+      const cell = inp.closest(".text-cell");
+      try {
+        await postJSON(urls.text, {
+          ...subjectOf(cell),
+          column_id: Number(cell.dataset.column),
+          value: inp.value,
+        });
+        flash(cell, true);
+      } catch (e) { flash(cell, false); alert(e.message); }
+    });
+  });
+
   // --- Commentaires ---
   grid.querySelectorAll(".comment-input").forEach((inp) => {
     inp.addEventListener("change", async () => {
@@ -189,6 +205,81 @@
     });
   });
 
+  // --- Défilement : sauts de séance et retour sur la dernière entrée ---
+  const wrap = document.getElementById("gridWrap");
+
+  function highlight(el) {
+    el.classList.add("just-added");
+    setTimeout(() => el.classList.remove("just-added"), 1900);
+  }
+
+  // Amène `id` dans la zone visible de la grille. Le calcul passe par les
+  // rectangles plutôt que par offsetLeft : la table n'est pas positionnée, et
+  // offsetLeft se rapporterait alors au document entier.
+  function focusTarget(id) {
+    if (!wrap) return;
+    if (id === "__start__") {
+      wrap.scrollTo({ left: 0, behavior: "smooth" });
+      return;
+    }
+    const el = document.getElementById(id);
+    if (!el) return;
+    const wr = wrap.getBoundingClientRect();
+    const er = el.getBoundingClientRect();
+    if (el.tagName === "TR") {
+      wrap.scrollTop += er.top - wr.top - wr.height / 3;
+    } else {
+      // La colonne « Étudiant » est figée à gauche : sans cette marge, la
+      // cible s'arrêterait juste dessous et resterait invisible.
+      const frozen = wrap.querySelector("thead th.subject");
+      const pad = (frozen ? frozen.getBoundingClientRect().width : 0) + 12;
+      wrap.scrollLeft += er.left - wr.left - pad;
+    }
+    highlight(el);
+  }
+
+  document.querySelectorAll("[data-jump]").forEach((btn) => {
+    btn.addEventListener("click", () => focusTarget(btn.dataset.jump));
+  });
+
+  // Mémorise l'état déplié des panneaux : ajouter trois colonnes d'affilée ne
+  // doit pas obliger à rouvrir le panneau entre chaque enregistrement.
+  document.querySelectorAll("details.tool[id]").forEach((d) => {
+    const key = "astranote:open:" + location.pathname + ":" + d.id;
+    if (sessionStorage.getItem(key) === "1") d.open = true;
+    d.addEventListener("toggle", () => {
+      if (d.open) sessionStorage.setItem(key, "1");
+      else sessionStorage.removeItem(key);
+    });
+  });
+
+  // Après un POST, le serveur redirige vers la grille : sans cela le navigateur
+  // la réafficherait tout en haut, à gauche, loin de l'entrée qu'on vient de
+  // créer. L'ancre (#col-star-12…) prime ; à défaut on restaure la position
+  // exacte d'avant l'envoi du formulaire.
+  const SCROLL_KEY = "astranote:scroll:" + location.pathname;
+  window.addEventListener("pagehide", () => {
+    sessionStorage.setItem(SCROLL_KEY, JSON.stringify({
+      page: window.scrollY,
+      left: wrap ? wrap.scrollLeft : 0,
+      top: wrap ? wrap.scrollTop : 0,
+    }));
+  });
+
+  requestAnimationFrame(() => {
+    const saved = sessionStorage.getItem(SCROLL_KEY);
+    if (saved) {
+      try {
+        const pos = JSON.parse(saved);
+        window.scrollTo(0, pos.page || 0);
+        if (wrap) { wrap.scrollLeft = pos.left || 0; wrap.scrollTop = pos.top || 0; }
+      } catch (e) { /* position illisible : on laisse le navigateur décider */ }
+    }
+    if (location.hash.length > 1) {
+      focusTarget(decodeURIComponent(location.hash.slice(1)));
+    }
+  });
+
   // --- Ajout de colonne (route dépendant de la date + type) ---
   const addColForm = document.getElementById("addColForm");
   if (addColForm) {
@@ -197,9 +288,10 @@
       const dateId = document.getElementById("colDate").value;
       const type = document.getElementById("colType").value;
       const title = document.getElementById("colTitle").value;
-      const base = type === "url"
-        ? addColForm.dataset.urlAction
-        : addColForm.dataset.starAction;
+      const base = {
+        url: addColForm.dataset.urlAction,
+        text: addColForm.dataset.textAction,
+      }[type] || addColForm.dataset.starAction;
       // Les routes sont générées avec date_id=0 ; on remplace /dates/0/ par la vraie date.
       const action = base.replace("/dates/0/", "/dates/" + dateId + "/");
       // Construit dynamiquement le POST.

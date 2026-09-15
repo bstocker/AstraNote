@@ -2,7 +2,8 @@
 
 Hiérarchie : School > AcademicYear > Class > Module > GradeDate > StarColumn.
 L'unité notée (`subject`) est l'étudiant (mode individuel) ou le groupe
-(mode groupe) : Star / UrlValue / NoteValue référencent l'un ou l'autre via
+(mode groupe) : Star / UrlValue / TextValue / NoteValue référencent l'un ou
+l'autre via
 (subject_type, subject_id).
 """
 from datetime import date as date_type
@@ -126,6 +127,10 @@ class GradeDate(db.Model):
         "UrlColumn", backref="grade_date", cascade="all, delete-orphan",
         order_by="UrlColumn.position",
     )
+    text_columns = db.relationship(
+        "TextColumn", backref="grade_date", cascade="all, delete-orphan",
+        order_by="TextColumn.position",
+    )
 
 
 class StarColumn(db.Model):
@@ -146,6 +151,22 @@ class UrlColumn(db.Model):
     position = db.Column(db.Integer, default=0)
 
     values = db.relationship("UrlValue", backref="url_column", cascade="all, delete-orphan")
+
+
+class TextColumn(db.Model):
+    """Colonne de texte libre rattachée à une séance.
+
+    Permet de consigner une remarque propre à cette séance (« a présenté seul »,
+    « rendu hors délai »…), sans incidence sur les étoiles ni sur la note /20.
+    Distincte du commentaire général, qui vaut pour tout le module.
+    """
+    __tablename__ = "text_column"
+    id = db.Column(db.Integer, primary_key=True)
+    grade_date_id = db.Column(db.Integer, db.ForeignKey("grade_date.id"), nullable=False)
+    title = db.Column(db.String(120))
+    position = db.Column(db.Integer, default=0)
+
+    values = db.relationship("TextValue", backref="text_column", cascade="all, delete-orphan")
 
 
 class NoteColumn(db.Model):
@@ -224,6 +245,20 @@ class UrlValue(db.Model):
     __table_args__ = (
         db.UniqueConstraint("subject_type", "subject_id", "url_column_id",
                             name="uq_url_subject_col"),
+    )
+
+
+class TextValue(db.Model):
+    __tablename__ = "text_value"
+    id = db.Column(db.Integer, primary_key=True)
+    subject_type = db.Column(db.String(10), nullable=False)
+    subject_id = db.Column(db.Integer, nullable=False)
+    text_column_id = db.Column(db.Integer, db.ForeignKey("text_column.id"), nullable=False)
+    content = db.Column(db.Text)
+
+    __table_args__ = (
+        db.UniqueConstraint("subject_type", "subject_id", "text_column_id",
+                            name="uq_text_subject_col"),
     )
 
 

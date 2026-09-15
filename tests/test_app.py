@@ -6,8 +6,8 @@ from openpyxl import load_workbook
 from astranote import create_app, grading
 from astranote.models import (
     db, School, AcademicYear, Class, Module, Student, Enrollment,
-    GradeDate, StarColumn, UrlColumn, NoteColumn, Group, Star, UrlValue,
-    NoteValue, SubjectColor, Teacher,
+    GradeDate, StarColumn, UrlColumn, TextColumn, NoteColumn, Group, Star,
+    UrlValue, TextValue, NoteValue, SubjectColor, Teacher,
 )
 from conftest import make_teacher, login, ADMIN_PW, TestConfig
 
@@ -1109,3 +1109,208 @@ def test_backup_script_keeps_last_14(tmp_path):
     assert len(remaining) == 14
     assert "astranote-20260101-000000.db" not in remaining   # les plus vieilles
     assert "astranote-20260116-000000.db" in remaining       # les plus récentes
+
+
+# --------------------------------------------------------------------------- #
+# Colonne de commentaire libre rattachée à une séance
+# --------------------------------------------------------------------------- #
+def test_text_column_crud_and_save(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    admin.post(f"/modules/{mid}/dates", data={"date": "2025-09-30"})
+    with app.app_context():
+        did = GradeDate.query.first().id
+    admin.post(f"/dates/{did}/text-columns", data={"title": "Remarque séance"})
+    with app.app_context():
+        col = TextColumn.query.one()
+        col_id, alice = col.id, ids["Alice"]
+        assert col.title == "Remarque séance"
+
+    r = admin.post(f"/modules/{mid}/save-text", json={
+        "subject_id": alice, "subject_type": "student",
+        "column_id": col_id, "value": "  A présenté seul  ",
+    })
+    assert r.status_code == 200
+    with app.app_context():
+        tv = TextValue.query.one()
+        assert tv.content == "A présenté seul" and tv.subject_id == alice
+
+    # La grille rend bien la valeur et l'intitulé de la colonne.
+    html = admin.get(f"/modules/{mid}").get_data(as_text=True)
+    assert "Remarque séance" in html and "A présenté seul" in html
+
+    # Vider la cellule retire la ligne plutôt que d'y stocker une chaîne vide.
+    admin.post(f"/modules/{mid}/save-text", json={
+        "subject_id": alice, "subject_type": "student",
+        "column_id": col_id, "value": "   ",
+    })
+    with app.app_context():
+        assert TextValue.query.count() == 0
+
+
+def test_text_column_does_not_affect_grades(app, admin):
+    """Le texte libre n'a aucune incidence sur les étoiles ni sur la note /20."""
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    did, star_col = add_star_column(app, admin, mid)
+    admin.post(f"/dates/{did}/text-columns", data={"title": "Note libre"})
+    with app.app_context():
+        text_col = TextColumn.query.one().id
+    admin.post(f"/modules/{mid}/save-star", json={
+        "subject_id": ids["Alice"], "column_id": star_col, "value": "4"})
+    admin.post(f"/modules/{mid}/save-text", json={
+        "subject_id": ids["Alice"], "column_id": text_col, "value": "4 étoiles méritées"})
+    r = admin.post(f"/modules/{mid}/save-star", json={
+        "subject_id": ids["Bob"], "column_id": star_col, "value": "2"})
+    grades = r.get_json()["grades"]
+    assert grades[f"student:{ids['Alice']}"]["total"] == 4
+    assert grades[f"student:{ids['Bob']}"]["note"] == 10.0
+
+
+def test_text_column_rejects_column_of_another_module(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    admin.post(f"/modules/{mid}/dates", data={"date": "2025-09-30"})
+    with app.app_context():
+        did = GradeDate.query.first().id
+    admin.post(f"/dates/{did}/text-columns", data={"title": "R"})
+    admin.post(f"/classes/{cid}/modules/new", data={"name": "Autre", "work_mode": "individual"})
+    with app.app_context():
+        other_mid = Module.query.filter_by(name="Autre").first().id
+        col_id = TextColumn.query.one().id
+    r = admin.post(f"/modules/{other_mid}/save-text", json={
+        "subject_id": ids["Alice"], "column_id": col_id, "value": "x"})
+    assert r.status_code == 400
+    with app.app_context():
+        assert TextValue.query.count() == 0
+
+
+def test_text_column_rename_reorder_delete(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    admin.post(f"/modules/{mid}/dates", data={"date": "2025-09-30"})
+    with app.app_context():
+        did = GradeDate.query.first().id
+    admin.post(f"/dates/{did}/text-columns", data={"title": "A"})
+    admin.post(f"/dates/{did}/text-columns", data={"title": "B"})
+    with app.app_context():
+        cols = TextColumn.query.order_by(TextColumn.position).all()
+        a_id, b_id = cols[0].id, cols[1].id
+    admin.post(f"/text-columns/{a_id}/rename", data={"title": "Alpha"})
+    admin.post(f"/text-columns/{a_id}/move", data={"dir": "down"})
+    with app.app_context():
+        cols = TextColumn.query.order_by(TextColumn.position).all()
+        assert [c.id for c in cols] == [b_id, a_id]
+        assert db.session.get(TextColumn, a_id).title == "Alpha"
+
+    # Supprimer la colonne emporte ses valeurs (cascade), sans orphelin.
+    admin.post(f"/modules/{mid}/save-text", json={
+        "subject_id": ids["Alice"], "column_id": a_id, "value": "texte"})
+    admin.post(f"/text-columns/{a_id}/delete")
+    with app.app_context():
+        assert db.session.get(TextColumn, a_id) is None
+        assert TextValue.query.count() == 0
+
+
+def test_text_values_purged_when_student_removed(app, admin):
+    """Une valeur de texte ne doit pas survivre au départ de l'étudiant."""
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    admin.post(f"/modules/{mid}/dates", data={"date": "2025-09-30"})
+    with app.app_context():
+        did = GradeDate.query.first().id
+    admin.post(f"/dates/{did}/text-columns", data={"title": "R"})
+    with app.app_context():
+        col_id = TextColumn.query.one().id
+    admin.post(f"/modules/{mid}/save-text", json={
+        "subject_id": ids["Alice"], "column_id": col_id, "value": "à retirer"})
+    admin.post(f"/enrollments/{enr['Alice']}/delete")
+    with app.app_context():
+        assert TextValue.query.count() == 0
+
+
+def test_neutralized_student_cannot_write_text(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    admin.post(f"/modules/{mid}/dates", data={"date": "2025-09-30"})
+    with app.app_context():
+        did = GradeDate.query.first().id
+    admin.post(f"/dates/{did}/text-columns", data={"title": "R"})
+    with app.app_context():
+        col_id = TextColumn.query.one().id
+    admin.post(f"/enrollments/{enr['Alice']}/toggle-active")
+    r = admin.post(f"/modules/{mid}/save-text", json={
+        "subject_id": ids["Alice"], "column_id": col_id, "value": "x"})
+    assert r.status_code == 403
+    with app.app_context():
+        assert TextValue.query.count() == 0
+
+
+# --------------------------------------------------------------------------- #
+# Ergonomie de la grille : ordre des séances et retour sur la nouvelle entrée
+# --------------------------------------------------------------------------- #
+def test_dates_listed_most_recent_first(app, admin):
+    """Menu d'ajout de colonne : la séance la plus récente ouvre la liste."""
+    from astranote.modules import dates_recent_first
+
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    for d in ("2025-09-10", "2025-11-02", "2025-10-01"):
+        admin.post(f"/modules/{mid}/dates", data={"date": d})
+    # Une séance sans date ne peut pas naître du formulaire (la colonne retombe
+    # sur la date du jour) ; on en fabrique une pour couvrir sa relégation.
+    admin.post(f"/modules/{mid}/dates", data={"label": "Sans date"})
+    with app.app_context():
+        undated = GradeDate.query.filter_by(label="Sans date").one()
+        undated.date = None
+        db.session.commit()
+    with app.app_context():
+        module = db.session.get(Module, mid)
+        ordered = dates_recent_first(module)
+        assert [gd.date.isoformat() if gd.date else None for gd in ordered] == [
+            "2025-11-02", "2025-10-01", "2025-09-10", None,
+        ]
+    # L'ordre chronologique de la grille elle-même reste celui des positions.
+    with app.app_context():
+        module = db.session.get(Module, mid)
+        assert [gd.position for gd in module.grade_dates] == [0, 1, 2, 3]
+
+
+def test_new_column_redirect_is_anchored(app, admin):
+    """Après création, la redirection cible l'entrée : plus de retour en haut."""
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    r = admin.post(f"/modules/{mid}/dates", data={"date": "2025-09-30"})
+    with app.app_context():
+        did = GradeDate.query.first().id
+    assert r.headers["Location"].endswith(f"#date-{did}")
+
+    r = admin.post(f"/dates/{did}/star-columns", data={"title": "A"})
+    with app.app_context():
+        sc = StarColumn.query.one().id
+    assert r.headers["Location"].endswith(f"#col-star-{sc}")
+
+    r = admin.post(f"/dates/{did}/text-columns", data={"title": "R"})
+    with app.app_context():
+        tc = TextColumn.query.one().id
+    assert r.headers["Location"].endswith(f"#col-text-{tc}")
+
+    r = admin.post(f"/modules/{mid}/note-columns", data={"title": "Note CC"})
+    with app.app_context():
+        nc = NoteColumn.query.one().id
+    assert r.headers["Location"].endswith(f"#col-note-{nc}")
+
+    # Une suppression n'ancre rien : la cible n'existe plus.
+    assert "#" not in admin.post(f"/star-columns/{sc}/delete").headers["Location"]
+
+
+def test_grid_exposes_anchors_and_navigation(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    did, sc = add_star_column(app, admin, mid)
+    html = admin.get(f"/modules/{mid}").get_data(as_text=True)
+    assert f'id="date-{did}"' in html
+    assert f'id="col-star-{sc}"' in html
+    assert f'id="subject-student-{ids["Alice"]}"' in html
+    # Raccourcis de défilement et zone de défilement dédiée.
+    assert 'data-jump="__start__"' in html and f'data-jump="date-{did}"' in html
+    assert 'id="gridWrap"' in html
+
+
+def test_creation_panels_are_folded_by_default(app, admin):
+    """Les zones de création sont repliées : la grille reste l'information."""
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    html = admin.get(f"/modules/{mid}").get_data(as_text=True)
+    assert '<details class="tool" id="tools-build">' in html
+    assert "Séances, colonnes &amp; notes" in html
