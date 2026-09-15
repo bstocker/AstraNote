@@ -71,16 +71,20 @@ def _module_redirect(module, anchor=None):
                             _anchor=anchor))
 
 
-def dates_recent_first(module):
-    """Séances de la plus récente à la plus ancienne.
+def module_dates_sorted(module, recent_first=False):
+    """Séances triées par date.
 
-    Ordre attendu dans le menu d'ajout de colonne : on travaille presque
-    toujours sur la séance du jour, qui doit venir en tête. Une séance sans
-    date n'a pas de place dans un ordre chronologique : elle est reléguée en
-    fin de liste, derrière les séances datées.
+    `recent_first` donne l'ordre du menu d'ajout de colonne : on travaille
+    presque toujours sur la séance du jour, qui doit y venir en tête. Par
+    défaut c'est l'ordre chronologique de lecture de la grille, celui du
+    bandeau de saut entre séances.
+
+    Dans les deux cas une séance sans date est reléguée en fin de liste :
+    elle n'a pas de place dans une chronologie.
     """
     dated = sorted((gd for gd in module.grade_dates if gd.date),
-                   key=lambda gd: (gd.date, gd.position or 0), reverse=True)
+                   key=lambda gd: (gd.date, gd.position or 0),
+                   reverse=recent_first)
     return dated + [gd for gd in module.grade_dates if not gd.date]
 
 
@@ -311,9 +315,13 @@ def view_module(module_id):
             key=lambda s: s.full_name.lower(),
         )
 
-    # Séances les plus récentes en tête : ordre du menu d'ajout de colonne et
-    # cible du raccourci « aller à la dernière séance » de la grille.
-    dates_desc = dates_recent_first(module)
+    # Deux ordres, pour deux usages : le bandeau de saut suit la chronologie
+    # de la grille, le menu d'ajout de colonne ouvre sur la séance du jour.
+    dates_asc = module_dates_sorted(module)
+    dates_desc = module_dates_sorted(module, recent_first=True)
+    # Séance la plus récente *datée* : c'est elle que le bandeau étoile et que
+    # vise le raccourci « Dernière séance ».
+    latest_date = next((gd for gd in dates_desc if gd.date), None)
 
     return render_template(
         "modules/module_detail.html",
@@ -324,7 +332,7 @@ def view_module(module_id):
         color_labels=SUBJECT_COLOR_LABELS,
         all_tokens=grading.ALL_TOKENS, special_statuses=grading.SPECIAL_STATUSES,
         unassigned_active=unassigned_active,
-        dates_desc=dates_desc, latest_date=(dates_desc[0] if dates_desc else None),
+        dates_asc=dates_asc, dates_desc=dates_desc, latest_date=latest_date,
     )
 
 

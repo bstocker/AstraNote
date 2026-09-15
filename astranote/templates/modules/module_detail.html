@@ -101,12 +101,15 @@
     une séance revient à masquer les précédentes sans rien perdre du repérage. -#}
 <div class="grid-nav">
   <span class="grid-nav-label">Aller à la séance</span>
+  {#- Ordre chronologique, comme la grille : la séance la plus récente ferme
+      la liste et porte l'étoile. -#}
   <div class="grid-nav-chips">
-    {% for gd in dates_desc %}
-      <button type="button" class="chip{{ ' latest' if loop.first else '' }}"
+    {% for gd in dates_asc %}
+      {% set is_latest = latest_date and gd.id == latest_date.id %}
+      <button type="button" class="chip{{ ' latest' if is_latest else '' }}"
               data-jump="date-{{ gd.id }}"
               title="{{ gd.date.strftime('%d/%m/%Y') if gd.date else 'Sans date' }}{% if gd.label %} · {{ gd.label }}{% endif %}">
-        {{ gd.date.strftime('%d/%m/%y') if gd.date else '—' }}{% if loop.first and gd.date %} ★{% endif %}
+        {{ gd.date.strftime('%d/%m/%y') if gd.date else '—' }}{% if is_latest %} ★{% endif %}
       </button>
     {% endfor %}
   </div>

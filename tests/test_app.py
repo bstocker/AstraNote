@@ -1245,7 +1245,7 @@ def test_neutralized_student_cannot_write_text(app, admin):
 # --------------------------------------------------------------------------- #
 def test_dates_listed_most_recent_first(app, admin):
     """Menu d'ajout de colonne : la séance la plus récente ouvre la liste."""
-    from astranote.modules import dates_recent_first
+    from astranote.modules import module_dates_sorted
 
     cid, mid, ids, enr = bootstrap_class(app, admin)
     for d in ("2025-09-10", "2025-11-02", "2025-10-01"):
@@ -1259,7 +1259,7 @@ def test_dates_listed_most_recent_first(app, admin):
         db.session.commit()
     with app.app_context():
         module = db.session.get(Module, mid)
-        ordered = dates_recent_first(module)
+        ordered = module_dates_sorted(module, recent_first=True)
         assert [gd.date.isoformat() if gd.date else None for gd in ordered] == [
             "2025-11-02", "2025-10-01", "2025-09-10", None,
         ]
@@ -1294,6 +1294,31 @@ def test_new_column_redirect_is_anchored(app, admin):
 
     # Une suppression n'ancre rien : la cible n'existe plus.
     assert "#" not in admin.post(f"/star-columns/{sc}/delete").headers["Location"]
+
+
+def test_jump_bar_is_chronological_latest_starred(app, admin):
+    """Bandeau « Aller à la séance » : de la plus ancienne à la plus récente."""
+    import re
+
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    for d in ("2025-11-02", "2025-09-10", "2025-10-01"):
+        admin.post(f"/modules/{mid}/dates", data={"date": d})
+    with app.app_context():
+        by_date = {g.date.isoformat(): g.id for g in GradeDate.query.all()}
+    html = admin.get(f"/modules/{mid}").get_data(as_text=True)
+    chips = html.split('grid-nav-chips')[1].split('</div>')[0]
+    assert re.findall(r'data-jump="date-(\d+)"', chips) == [
+        str(by_date["2025-09-10"]), str(by_date["2025-10-01"]),
+        str(by_date["2025-11-02"]),
+    ]
+    # L'étoile et la mise en avant vont à la dernière puce, la plus récente.
+    starred = re.findall(r'data-jump="date-(\d+)"[^>]*>\s*[\d/]+ ★', chips)
+    assert starred == [str(by_date["2025-11-02"])]
+    assert chips.count("chip latest") == 1
+
+    # Le menu d'ajout de colonne, lui, garde la plus récente en tête.
+    options = html.split('id="colDate"')[1].split("</select>")[0]
+    assert re.findall(r'value="(\d+)"', options)[0] == str(by_date["2025-11-02"])
 
 
 def test_grid_exposes_anchors_and_navigation(app, admin):
