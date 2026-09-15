@@ -183,6 +183,14 @@ table.grid thead th {
   background: #f8fafc; font-weight: 600;
   position: sticky; z-index: 4;   /* en-tête figé au scroll vertical */
 }
+/* Empilement des cellules figées, du fond vers la surface :
+     3  colonne « Étudiant » du corps  (figée à gauche)
+     4  en-tête, rangée des intitulés  (figée en haut)
+     5  en-tête, rangée des dates      (figée en haut)
+     6  cellule d'angle « Étudiant »   (figée sur les deux axes)
+   L'ordre compte : une cellule figée sur un seul axe doit toujours passer
+   SOUS celles qui sont figées sur l'autre, faute de quoi elle les recouvre en
+   défilant. L'angle, figé sur les deux, domine le reste. */
 /* L'en-tête tient sur deux rangées : la seconde doit se caler SOUS la
    première. Sans décalage, les deux collent à 0 et la ligne des dates
    disparaît derrière celle des intitulés de colonnes. Sa hauteur dépend du
@@ -194,13 +202,16 @@ table.grid th.date-head { background: #eef2ff; color: var(--accent-dark); }
 table.grid th.url-head { background: #f0f9ff; color: #0369a1; }
 table.grid th.note-head { background: var(--note-bg); }
 table.grid td.subject, table.grid th.subject {
-  text-align: left; position: sticky; left: 0; background: #fff; z-index: 6;
+  text-align: left; position: sticky; left: 0; background: #fff; z-index: 3;
   min-width: 190px; font-weight: 500;
   /* Ombre portée : matérialise la limite de la colonne figée quand les
      séances défilent dessous. */
   box-shadow: 3px 0 5px -3px rgba(15, 23, 42, .35);
 }
-table.grid thead th.subject { background: #f8fafc; z-index: 7; }
+/* Sélecteur aligné sur celui de la rangée des dates (`thead tr:first-child
+   th`) : moins spécifique, la cellule d'angle en hériterait le z-index 5 et
+   se ferait recouvrir par les noms d'étudiants qui défilent dessous. */
+table.grid thead tr:first-child th.subject { background: #f8fafc; z-index: 6; }
 /* Séance la plus récente : repérable d'un coup d'œil au milieu des autres. */
 table.grid th.date-head.latest { background: #e0e7ff; box-shadow: inset 0 -3px 0 var(--accent); }
 /* Pseudo Discord sous le nom de l'étudiant (repérage pendant la saisie). */

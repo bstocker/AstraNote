@@ -1401,3 +1401,78 @@ def test_grid_header_rows_are_both_sticky(app, admin):
     assert "table.grid thead tr + tr th { top: var(--grid-head-h, 34px); }" in css
     js = admin.get("/static/js/grid.js").get_data(as_text=True)
     assert '"--grid-head-h"' in js
+
+
+def _css_rules(css):
+    """(sélecteur, corps) de chaque règle, commentaires retirés.
+
+    Un découpage naïf sur les accolades buterait sur les blocs @media et
+    @keyframes du fichier, et un commentaire contenant une virgule ferait
+    passer du texte pour un sélecteur.
+    """
+    import re
+
+    css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    rules, token, depth, heads = [], "", 0, {}
+    for ch in css:
+        if ch == "{":
+            depth += 1
+            heads[depth] = token.strip()
+            token = ""
+        elif ch == "}":
+            if depth == 2 or (depth == 1 and not heads[1].startswith("@")):
+                rules.append((heads[depth], token))
+            token = ""
+            depth -= 1
+        else:
+            token += ch
+    return rules
+
+
+def _effective_z_index(css, selectors):
+    """z-index retenu par la cascade pour une cellule, parmi `selectors`.
+
+    Une simple recherche de chaîne ne suffit pas : c'est précisément une règle
+    plus spécifique qui écrasait le z-index de la cellule d'angle. On résout
+    donc spécificité d'abord, ordre d'apparition ensuite.
+    """
+    import re
+
+    def specificity(sel):
+        return (sel.count("#"),
+                sel.count(".") + sel.count(":") + sel.count("["),
+                len(re.findall(r"(?:^|[\s>+~])([a-z]+)", sel)))
+
+    best = None
+    for order, (head, body) in enumerate(_css_rules(css)):
+        m = re.search(r"z-index:\s*(\d+)", body)
+        if not m:
+            continue
+        for sel in (x.strip() for x in head.split(",")):
+            if sel not in selectors:
+                continue
+            key = (specificity(sel), order)
+            if best is None or key > best[0]:
+                best = (key, int(m.group(1)))
+    assert best, selectors
+    return best[1]
+
+
+def test_frozen_cells_stacking_order(app, admin):
+    """L'angle « Étudiant » domine ; le corps figé passe sous l'en-tête."""
+    css = admin.get("/static/css/style.css").get_data(as_text=True)
+
+    body_subject = _effective_z_index(css, {
+        "table.grid td.subject"})
+    head_titles = _effective_z_index(css, {
+        "table.grid thead th", "table.grid thead tr + tr th"})
+    head_dates = _effective_z_index(css, {
+        "table.grid thead th", "table.grid thead tr:first-child th",
+        "table.grid th.date-head"})
+    corner = _effective_z_index(css, {
+        "table.grid thead th", "table.grid thead tr:first-child th",
+        "table.grid th.subject", "table.grid thead tr:first-child th.subject"})
+
+    # Figé sur un seul axe : doit passer sous ce qui est figé sur l'autre.
+    assert body_subject < head_titles < head_dates < corner, (
+        body_subject, head_titles, head_dates, corner)
