@@ -6,7 +6,8 @@ from openpyxl import load_workbook
 from astranote import create_app, grading
 from astranote.models import (
     db, School, AcademicYear, Class, Module, Student, Enrollment,
-    GradeDate, StarColumn, UrlColumn, TextColumn, NoteColumn, Group, Star,
+    GradeDate, StarColumn, UrlColumn, TextColumn, NoteColumn, Group,
+    GroupMember, Star,
     UrlValue, TextValue, NoteValue, SubjectColor, Teacher,
 )
 from conftest import make_teacher, login, ADMIN_PW, TestConfig
@@ -895,6 +896,54 @@ def test_grid_renders_foldable_members(app, admin):
     assert grid.count("hidden") == 2                  # repliées par défaut
     assert "Alice" in grid and "Bob" in grid
     assert "Chloe" not in grid                        # sans groupe : hors grille
+
+
+def test_removed_student_leaves_no_ghost_member(app, admin):
+    """Retirer un étudiant affecté à un groupe ne doit pas casser la grille.
+
+    Sans cascade, la suppression de l'étudiant laissait une ligne
+    `group_member` pointant dans le vide : la grille du module répondait 500.
+    """
+    cid, mid, gid, ids, enr = bootstrap_group_module(app, admin)
+    assert admin.post(f"/enrollments/{enr['Alice']}/delete").status_code == 302
+
+    with app.app_context():
+        assert GroupMember.query.filter_by(student_id=ids["Alice"]).count() == 0
+    html = admin.get(f"/modules/{mid}").get_data(as_text=True)
+    assert "Alice" not in html and "Bob" in html
+
+
+def test_removed_enrollment_clears_group_of_that_class_only(app, admin):
+    """Un étudiant inscrit ailleurs survit, mais quitte les groupes de la classe."""
+    cid, mid, gid, ids, enr = bootstrap_group_module(app, admin)
+    with app.app_context():
+        # Seconde classe : l'étudiant n'est plus à son dernier rattachement.
+        other = Class(name="B2", school_id=School.query.first().id,
+                      academic_year_id=AcademicYear.query.first().id,
+                      teacher_id=1)
+        db.session.add(other)
+        db.session.flush()
+        db.session.add(Enrollment(student_id=ids["Alice"], class_id=other.id))
+        db.session.commit()
+
+    admin.post(f"/enrollments/{enr['Alice']}/delete")
+    with app.app_context():
+        assert Student.query.get(ids["Alice"]) is not None
+        assert GroupMember.query.filter_by(student_id=ids["Alice"]).count() == 0
+    assert admin.get(f"/modules/{mid}").status_code == 200
+
+
+def test_migration_repairs_orphan_group_members(app, admin):
+    """Les bases déjà abîmées sont réparées au démarrage."""
+    cid, mid, gid, ids, enr = bootstrap_group_module(app, admin)
+    with app.app_context():
+        # Orphelin fabriqué comme le faisait l'ancienne suppression.
+        db.session.add(GroupMember(group_id=gid, student_id=999_999))
+        db.session.commit()
+        from astranote import _run_migrations
+        _run_migrations(app)
+        assert GroupMember.query.filter_by(student_id=999_999).count() == 0
+    assert admin.get(f"/modules/{mid}").status_code == 200
 
 
 def test_member_stars_are_independent_from_group(app, admin):

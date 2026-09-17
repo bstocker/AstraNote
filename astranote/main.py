@@ -15,7 +15,7 @@ from sqlalchemy import or_
 
 from .models import (
     db, School, AcademicYear, Class, Module, Student, Enrollment, Teacher,
-    Star, UrlValue, TextValue, NoteValue, SubjectColor,
+    GroupMember, Star, UrlValue, TextValue, NoteValue, SubjectColor,
     SUBJECT_STUDENT, SUBJECT_GROUP,
 )
 from .auth import admin_required
@@ -48,6 +48,21 @@ def purge_subject_data(subject_type, subject_id,
     _delete(NoteValue, NoteValue.note_column_id, note_col_ids)
     # Les couleurs sont rattachées au module, pas à une colonne.
     _delete(SubjectColor, SubjectColor.module_id, module_ids)
+
+
+def purge_group_memberships(klass, student_id):
+    """Retire un étudiant des groupes des modules d'une classe.
+
+    Pendant du `purge_subject_data` pour les affectations : un étudiant qui
+    quitte la classe ne doit plus figurer dans les groupes de ses modules,
+    sinon la grille affiche un membre qui n'est plus inscrit.
+    """
+    group_ids = [g.id for m in klass.modules for g in m.groups]
+    if group_ids:
+        GroupMember.query.filter(
+            GroupMember.student_id == student_id,
+            GroupMember.group_id.in_(group_ids),
+        ).delete(synchronize_session=False)
 
 
 def _class_column_ids(klass):
@@ -467,6 +482,7 @@ def remove_student(enrollment_id):
     purge_subject_data(SUBJECT_STUDENT, student.id, star_ids, url_ids, note_ids,
                        module_ids=[m.id for m in klass.modules],
                        text_col_ids=text_ids)
+    purge_group_memberships(klass, student.id)
 
     if len(student.enrollments) <= 1:
         # Dernier rattachement : purge résiduelle puis suppression de l'étudiant

@@ -104,6 +104,22 @@ def _run_migrations(app):
     add_column_if_missing("school", "observation", "TEXT")
     add_column_if_missing("class", "hourly_rate", "FLOAT")
 
+    # Réparation : affectations de groupe pointant vers un étudiant supprimé.
+    # Avant la cascade `Student.group_memberships`, retirer un étudiant de sa
+    # dernière classe laissait ces lignes derrière lui, et la grille du module
+    # en groupe répondait alors 500.
+    if "group_member" in inspector.get_table_names():
+        removed = db.session.execute(text(
+            "DELETE FROM group_member WHERE student_id NOT IN"
+            " (SELECT id FROM student)"
+        )).rowcount
+        db.session.commit()
+        if removed:
+            app.logger.warning(
+                "Migration : %s affectation(s) de groupe orpheline(s) supprimée(s).",
+                removed,
+            )
+
 
 def _ensure_admin(app):
     """Crée le compte administrateur au premier démarrage s'il n'existe pas."""

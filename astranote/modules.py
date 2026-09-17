@@ -145,7 +145,10 @@ def module_members(module):
     }
     members = {}
     for group in module.groups:
-        rows = sorted((m.student for m in group.members),
+        # `m.student` peut être None sur une base antérieure à la cascade des
+        # affectations (cf. réparation dans _run_migrations) : on l'ignore
+        # plutôt que de faire tomber toute la grille.
+        rows = sorted((m.student for m in group.members if m.student),
                       key=lambda st: (not st.active, st.full_name.lower()))
         members[group.id] = [
             {"type": SUBJECT_STUDENT, "id": st.id, "label": st.full_name,

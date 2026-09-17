@@ -217,7 +217,14 @@ class GroupMember(db.Model):
     group_id = db.Column(db.Integer, db.ForeignKey("group.id"), nullable=False)
     student_id = db.Column(db.Integer, db.ForeignKey("student.id"), nullable=False)
 
-    student = db.relationship("Student")
+    # Cascade déclarée côté étudiant : supprimer un étudiant (retrait de sa
+    # dernière classe) doit emporter ses affectations de groupe. Sans elle, la
+    # ligne restait avec un `student_id` pointant dans le vide et la grille du
+    # module en groupe plantait en lisant `member.student.active`.
+    student = db.relationship(
+        "Student",
+        backref=db.backref("group_memberships", cascade="all, delete-orphan"),
+    )
 
 
 class Star(db.Model):
