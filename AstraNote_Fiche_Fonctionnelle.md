@@ -212,6 +212,15 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
 - Résultats listant, pour chaque étudiant trouvé, ses **écoles, années, classes et modules** de rattachement, avec accès direct.
 - Périmètre respectant les droits : l'enseignant cherche dans **ses** classes, l'administrateur dans toute la base.
 
+### 5.11 Planning et partage des disponibilités
+- Accessible depuis le menu (**📅 Planning**), avec le même **sélecteur d'année académique** que le tableau de bord.
+- **Année entière en synthèse** : une ligne par semaine, du **lundi au vendredi**, chaque journée coupée en **deux demi-journées** (matin / après-midi). Les semaines sont regroupées par mois ; la semaine en cours est repérée et atteignable d'un clic.
+- Les bornes de l'année sont **déduites du libellé** de l'année académique (« 2025-2026 » = 1er septembre 2025 → 31 août 2026). Les jours des semaines de bord qui sortent de l'année sont affichés inertes.
+- **Cocher une demi-journée** la réserve pour les cours : elle passe en **« Non disponible »** (rouge). Tout le reste est réputé disponible. L'enregistrement est immédiat (AJAX), sans bouton à valider.
+- Compteur des demi-journées réservées, par semaine et sur l'année.
+- Le planning est **propre à chaque enseignant** : personne ne voit ni ne modifie celui d'un autre.
+- **Partage par lien externe** : un lien public par année, **en lecture seule**, consultable **sans compte**. Il n'expose que le nom de l'enseignant, l'année et les demi-journées occupées — aucune classe, aucun étudiant, aucune note. Le lien est **régénérable** (l'ancien cesse alors de fonctionner) et **supprimable**. La page porte `noindex` : un lien diffusé par message n'a pas à être indexé.
+
 ---
 
 ## 6. Modèle de données (SQLite)
@@ -235,6 +244,8 @@ Star(id, subject_type, subject_id, star_column_id, value)     # subject = studen
 UrlValue(id, subject_type, subject_id, url_column_id, url)     # lien par étudiant/groupe
 NoteValue(id, subject_type, subject_id, note_column_id, score) # note manuelle /20
 GroupComment(id, group_id, comment)                  # commentaire général du groupe
+PlanningSlot(id, teacher_id, date, half)             # demi-journée réservée (half = am | pm) ; pas de ligne = disponible
+PlanningShare(id, teacher_id, academic_year_id, token, created_at)  # lien public de consultation du planning
 ```
 
 L'**unité notée** (`subject`) est l'étudiant en mode individuel, le groupe en mode groupe : `Star` et `NoteValue` référencent l'un ou l'autre selon le `work_mode` du module. La note d'étoiles est **dérivée** (calculée à la volée) et non stockée en dur ; les notes manuelles sont stockées telles quelles.

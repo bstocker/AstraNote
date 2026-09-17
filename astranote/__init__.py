@@ -38,10 +38,12 @@ def create_app(config_object=Config):
     from .auth import auth_bp
     from .main import main_bp
     from .modules import modules_bp
+    from .planning import planning_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
     app.register_blueprint(modules_bp)
+    app.register_blueprint(planning_bp)
 
     @app.errorhandler(413)
     def too_large(_err):

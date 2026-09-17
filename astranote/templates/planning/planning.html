@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% from "planning/_table.html" import planning_table, planning_legend with context %}
+{% block title %}Planning{% if year %} {{ year.label }}{% endif %} — AstraNote{% endblock %}
+{% block content %}
+<div class="flex-between">
+  <div>
+    <h1>Planning</h1>
+    <p class="muted">
+      Cochez les demi-journées que vous réservez pour vos cours : elles passent
+      en « Non disponible ». Tout le reste est considéré comme disponible.
+    </p>
+  </div>
+</div>
+
+{% if not years %}
+  <div class="panel">
+    <p>Aucune année académique pour l'instant.</p>
+    <p class="muted">Commencez par créer une
+      <a href="{{ url_for('main.schools') }}">école et une année académique</a>.</p>
+  </div>
+{% else %}
+  <form method="get" class="panel" style="display:flex; align-items:flex-end; gap:12px; margin-bottom:16px;">
+    <div style="flex:0 0 260px;">
+      <label>Année académique</label>
+      <select name="year" onchange="this.form.submit()">
+        {% for y in years %}
+          <option value="{{ y.id }}" {{ 'selected' if y.id == selected_year_id else '' }}>{{ y.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <noscript><button class="btn" type="submit">Afficher</button></noscript>
+  </form>
+
+  {{ planning_legend(start, end, reserved, has_current) }}
+  {{ planning_table(months, editable=True) }}
+
+  <!-- ---------------- Partage en lecture seule ---------------- -->
+  <details class="tool" id="tools-share"{% if share %} open{% endif %}>
+    <summary>🔗 Partager ce planning</summary>
+    <div class="panel" style="max-width:760px;">
+      {% if share %}
+        <p class="help">Ce lien donne accès à vos disponibilités de
+          {{ year.label }} <strong>en lecture seule</strong>, sans compte ni mot
+          de passe. Personne ne peut modifier votre planning, et la page
+          n'affiche ni classe, ni étudiant, ni note.</p>
+        <div class="share-row">
+          <input type="text" id="shareUrl" readonly
+                 value="{{ url_for('planning.public_planning', token=share.token, _external=True) }}">
+          <button class="btn secondary small" type="button" data-copy="#shareUrl">Copier</button>
+          <a class="btn secondary small" target="_blank" rel="noopener"
+             href="{{ url_for('planning.public_planning', token=share.token) }}">Ouvrir ↗</a>
+        </div>
+        <div class="inline-form" style="margin-top:12px;">
+          <form method="post" action="{{ url_for('planning.share_link') }}"
+                onsubmit="return confirm('Régénérer le lien ? L\'ancien cessera de fonctionner.');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="year" value="{{ year.id }}">
+            <button class="btn secondary small" type="submit">Régénérer le lien</button>
+          </form>
+          <form method="post" action="{{ url_for('planning.revoke_link') }}"
+                onsubmit="return confirm('Supprimer le lien de partage ?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="year" value="{{ year.id }}">
+            <button class="btn danger small" type="submit">Supprimer le lien</button>
+          </form>
+        </div>
+      {% else %}
+        <p class="help">Créez un lien public pour communiquer vos
+          disponibilités de {{ year.label }} à l'extérieur. Les personnes qui le
+          reçoivent consultent le planning sans pouvoir le modifier.</p>
+        <form method="post" action="{{ url_for('planning.share_link') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="year" value="{{ year.id }}">
+          <button class="btn" type="submit">Créer le lien de partage</button>
+        </form>
+      {% endif %}
+    </div>
+  </details>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/planning.js') }}"></script>
+{% endblock %}

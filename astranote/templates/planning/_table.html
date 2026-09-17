@@ -1,0 +1,79 @@
+{#- Tableau de planning, partagé par la vue de l'enseignant et le lien public.
+
+    `editable` décide de la présence des cases à cocher : le lien public rend
+    exactement la même grille, en lecture seule. Une seule source pour les deux
+    évite qu'elles divergent au fil des retouches.
+
+    À importer avec `with context` : les libellés de jours viennent du
+    processeur de contexte du blueprint. -#}
+
+{% macro planning_table(months, editable=False) %}
+<div class="planning-wrap">
+  <table class="planning"{% if editable %} id="planning"
+         data-save-slot="{{ url_for('planning.save_slot') }}"{% endif %}>
+    <thead>
+      <tr>
+        <th class="week" rowspan="2">Semaine</th>
+        {% for day in week_days %}
+          <th class="day" colspan="2">{{ day }}</th>
+        {% endfor %}
+        <th class="count" rowspan="2" title="Demi-journées réservées dans la semaine">Rés.</th>
+      </tr>
+      <tr>
+        {% for day in week_days %}
+          {% for half in halves %}
+            <th class="half">{{ half_labels[half] }}</th>
+          {% endfor %}
+        {% endfor %}
+      </tr>
+    </thead>
+    {% for month in months %}
+    {#- Un <tbody> par mois : le regroupement se lit d'un coup d'œil sur une
+        année entière, et l'intitulé du mois reste collé à ses semaines. -#}
+    <tbody>
+      <tr class="month-row"><th colspan="12">{{ month.label }}</th></tr>
+      {% for week in month.weeks %}
+      <tr{% if week.is_current %} class="current-week" id="semaine-en-cours"{% endif %}>
+        <th class="week">S{{ week.iso }}<span class="week-dates">{{ week.label }}</span></th>
+        {% for day in week.days %}
+          {% for half in halves %}
+            {% set on = day[half] %}
+            <td class="slot{{ ' busy' if on else '' }}{{ ' out' if not day.in_year else '' }}"
+                {%- if day.in_year %} data-date="{{ day.date.isoformat() }}" data-half="{{ half }}"
+                title="{{ day.label }} · {{ half_labels[half] }} — {{ 'Non disponible' if on else 'Disponible' }}"
+                {%- else %} title="Hors de l'année académique"{% endif %}>
+              {% if day.in_year and editable %}
+                <input type="checkbox" class="slot-box" {{ 'checked' if on }}
+                       aria-label="{{ day.label }} · {{ half_labels[half] }}">
+              {% elif day.in_year %}
+                <span class="sr-only">{{ 'Non disponible' if on else 'Disponible' }}</span>
+              {% endif %}
+            </td>
+          {% endfor %}
+        {% endfor %}
+        <td class="count">{{ week.count }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    {% endfor %}
+  </table>
+</div>
+{% endmacro %}
+
+{#- Bandeau commun : période couverte, compteur, légende et saut à la semaine
+    en cours (une année tient sur ~52 lignes : y arriver à la main est pénible). -#}
+{% macro planning_legend(start, end, reserved, has_current=False) %}
+<div class="planning-bar">
+  <span class="muted">Du {{ start.strftime('%d/%m/%Y') }} au {{ end.strftime('%d/%m/%Y') }}</span>
+  <span class="planning-total"><strong id="reservedTotal">{{ reserved }}</strong>
+    demi-journée(s) réservée(s)</span>
+  <span class="spacer"></span>
+  <span class="legend"><span class="key busy"></span> Non disponible</span>
+  <span class="legend"><span class="key free"></span> Disponible</span>
+  <span class="legend"><span class="key out"></span> Hors année</span>
+  {#- Le saut n'a de cible que si l'année affichée contient aujourd'hui. -#}
+  {% if has_current %}
+  <a class="btn secondary small" href="#semaine-en-cours">Semaine en cours ⇥</a>
+  {% endif %}
+</div>
+{% endmacro %}

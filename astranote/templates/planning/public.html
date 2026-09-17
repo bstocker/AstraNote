@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% from "planning/_table.html" import planning_table, planning_legend with context %}
+{% block title %}Disponibilités de {{ teacher.name }} — {{ year.label }}{% endblock %}
+{% block head_extra %}
+{#- Un lien de partage se diffuse par mail ou par message, jamais par moteur de
+    recherche : le jeton perdrait tout son rôle de secret s'il était indexé. -#}
+<meta name="robots" content="noindex, nofollow">
+{% endblock %}
+{% block content %}
+<div class="public-head">
+  <img class="logo" src="{{ url_for('static', filename='img/logo.png') }}" alt="AstraNote">
+  <div>
+    <h1>Disponibilités de {{ teacher.name }}</h1>
+    <p class="muted">Année {{ year.label }} · consultation seule</p>
+  </div>
+</div>
+
+<p class="help">Les demi-journées en rouge sont déjà réservées par des cours.
+  Les autres sont disponibles. Cette page est mise à jour en direct par
+  {{ teacher.name }} ; elle ne peut pas être modifiée depuis ce lien.</p>
+
+{{ planning_legend(start, end, reserved, has_current) }}
+{{ planning_table(months) }}
+{% endblock %}

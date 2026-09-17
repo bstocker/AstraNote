@@ -6,7 +6,7 @@ L'unité notée (`subject`) est l'étudiant (mode individuel) ou le groupe
 l'autre via
 (subject_type, subject_id).
 """
-from datetime import date as date_type
+from datetime import date as date_type, datetime
 
 from flask_login import UserMixin
 from flask_sqlalchemy import SQLAlchemy
@@ -280,6 +280,69 @@ class NoteValue(db.Model):
     __table_args__ = (
         db.UniqueConstraint("subject_type", "subject_id", "note_column_id",
                             name="uq_note_subject_col"),
+    )
+
+
+# Demi-journées d'une journée de planning (valeur -> libellé).
+HALF_AM, HALF_PM = "am", "pm"
+HALF_DAYS = {HALF_AM: "Matin", HALF_PM: "Après-midi"}
+
+
+class PlanningSlot(db.Model):
+    """Demi-journée réservée par un enseignant : il n'y est pas disponible.
+
+    Une ligne = une demi-journée réservée. L'absence de ligne signifie
+    « disponible » : le planning d'une année vierge ne coûte donc rien en base,
+    et décocher une case supprime simplement la ligne.
+
+    L'année académique n'est pas stockée : elle se déduit de la date (cf.
+    `planning.year_bounds`). Une seule vérité, et redéfinir les bornes d'une
+    année ne laisse pas de réservations orphelines derrière elle.
+    """
+    __tablename__ = "planning_slot"
+    id = db.Column(db.Integer, primary_key=True)
+    teacher_id = db.Column(db.Integer, db.ForeignKey("teacher.id"), nullable=False)
+    date = db.Column(db.Date, nullable=False)
+    half = db.Column(db.String(2), nullable=False)  # am | pm
+
+    teacher = db.relationship(
+        "Teacher",
+        backref=db.backref("planning_slots", cascade="all, delete-orphan"),
+    )
+
+    __table_args__ = (
+        db.UniqueConstraint("teacher_id", "date", "half",
+                            name="uq_planning_teacher_date_half"),
+    )
+
+
+class PlanningShare(db.Model):
+    """Lien public de consultation du planning d'un enseignant pour une année.
+
+    Le jeton vaut mot de passe : il donne un accès en **lecture seule** sans
+    authentification. Un lien par (enseignant, année), régénérable — régénérer
+    remplace le jeton, ce qui invalide le lien précédemment diffusé.
+    """
+    __tablename__ = "planning_share"
+    id = db.Column(db.Integer, primary_key=True)
+    teacher_id = db.Column(db.Integer, db.ForeignKey("teacher.id"), nullable=False)
+    academic_year_id = db.Column(db.Integer, db.ForeignKey("academic_year.id"),
+                                 nullable=False)
+    token = db.Column(db.String(64), nullable=False, unique=True, index=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    teacher = db.relationship(
+        "Teacher",
+        backref=db.backref("planning_shares", cascade="all, delete-orphan"),
+    )
+    academic_year = db.relationship(
+        "AcademicYear",
+        backref=db.backref("planning_shares", cascade="all, delete-orphan"),
+    )
+
+    __table_args__ = (
+        db.UniqueConstraint("teacher_id", "academic_year_id",
+                            name="uq_planning_share_teacher_year"),
     )
 
 

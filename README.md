@@ -73,6 +73,16 @@ finales restent saisies à la main par l'enseignant.
 - **Administration** : compteurs de la base et téléchargement de la sauvegarde en
   un clic.
 
+### Planning et disponibilités
+
+- **Planning de l'année** (menu **📅 Planning**) : l'année entière en synthèse, une
+  ligne par semaine du lundi au vendredi, chaque journée en deux demi-journées.
+- **Cocher une demi-journée** la réserve pour les cours : elle passe en
+  « Non disponible ». Enregistrement immédiat, compteurs par semaine et par année.
+- **Partage par lien externe** en lecture seule : les personnes qui le reçoivent
+  consultent les disponibilités sans compte et sans pouvoir rien modifier. Le lien
+  est régénérable (ce qui invalide le précédent) et supprimable.
+
 ## Démarrage local
 
 ```bash
@@ -109,13 +119,14 @@ run.py                 Point d'entrée local
 wsgi.py                Point d'entrée WSGI (PythonAnywhere)
 astranote/
   __init__.py          App factory + migrations légères + création admin
-  models.py            Modèle de données (19 tables SQLite)
+  models.py            Modèle de données (21 tables SQLite)
   grading.py           Calcul du prorata /20 et classement (règles R1–R12)
   auth.py              Login / logout / mon compte / comptes enseignants
   main.py              Structure, étudiants, recherche, dashboard, administration
   modules.py           Grille, dates, colonnes, groupes, saisie AJAX, Excel
+  planning.py          Planning de l'année, demi-journées et lien de partage
   templates/           Jinja2
-  static/              CSS + JS de la grille
+  static/              CSS + JS de la grille et du planning
 ```
 
 ## Tests

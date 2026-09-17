@@ -443,3 +443,90 @@ td.text-cell textarea {
 @media (max-width: 720px) {
   .grid-wrap { max-height: calc(100vh - 220px); }
 }
+
+/* --------------------------------------------------------------------- */
+/* Planning : année en synthèse, semaines du lundi au vendredi            */
+/* --------------------------------------------------------------------- */
+.planning-bar {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  margin-bottom: 8px; padding: 8px 12px;
+  background: #fff; border: 1px solid var(--border); border-radius: 10px;
+  font-size: 12px;
+}
+.planning-bar .spacer { flex: 1; }
+.planning-total { color: var(--ink); }
+.legend { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); }
+.legend .key {
+  width: 13px; height: 13px; border-radius: 3px; border: 1px solid var(--border);
+}
+.legend .key.busy { background: #fecaca; border-color: #f87171; }
+.legend .key.free { background: #fff; }
+.legend .key.out { background: #f1f5f9; border-style: dashed; }
+
+.planning-wrap { overflow-x: auto; background: #fff; border-radius: 10px; }
+table.planning {
+  border-collapse: collapse; font-size: 12px; width: 100%;
+  background: #fff;
+}
+table.planning th, table.planning td {
+  border: 1px solid var(--border); padding: 3px 4px; text-align: center;
+}
+/* En-tête figé : une année compte une cinquantaine de lignes, et sans cela on
+   perd de vue à quel jour correspond la colonne dès le premier défilement. */
+table.planning thead th {
+  position: sticky; background: #f8fafc; font-size: 11px; z-index: 2;
+}
+/* La hauteur de la première rangée est imposée pour que le décalage de la
+   seconde puisse l'être aussi : contrairement à la grille de module, les
+   intitulés sont ici fixes (Lundi… Vendredi) et n'ont pas besoin de JavaScript
+   pour être mesurés. */
+table.planning thead tr:first-child th { top: 0; height: 24px; }
+table.planning thead tr + tr th { top: 24px; height: 24px; font-weight: 500; color: var(--muted); }
+table.planning th.day { background: #eef2ff; color: var(--accent-dark); }
+table.planning th.week, table.planning td.count { white-space: nowrap; }
+table.planning th.week {
+  text-align: left; font-size: 11px; width: 150px;
+  background: #f8fafc; font-weight: 600;
+}
+.week-dates { color: var(--muted); font-weight: 400; margin-left: 6px; }
+table.planning td.count { color: var(--muted); width: 38px; }
+
+/* Intitulé de mois : respiration visuelle dans une année entière. */
+table.planning tr.month-row th {
+  text-align: left; background: var(--bg-soft); color: #fff;
+  font-size: 12px; letter-spacing: .3px; padding: 5px 8px;
+}
+/* Semaine en cours : repère de lecture, et cible du saut du bandeau. Le
+   décalage compense l'en-tête figé, qui sinon la recouvrirait après le saut. */
+table.planning tr.current-week { scroll-margin-top: 60px; }
+table.planning tr.current-week th.week {
+  background: #e0e7ff; color: var(--accent-dark);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* Demi-journée : blanche = disponible, rouge = réservée pour un cours. */
+table.planning td.slot { width: 38px; height: 22px; background: #fff; }
+table.planning td.slot.busy { background: #fecaca; }
+table.planning td.slot.out {
+  background: repeating-linear-gradient(135deg, #f8fafc 0 4px, #eef2f7 4px 8px);
+}
+table.planning td.slot input.slot-box {
+  width: 13px; height: 13px; margin: 0; cursor: pointer; accent-color: var(--red);
+  vertical-align: middle;
+}
+table.planning tr:hover td.slot:not(.out) { outline: 1px solid var(--border); }
+
+/* Lien de partage : le champ occupe la place, les boutons suivent. */
+.share-row { display: flex; gap: 8px; align-items: center; }
+.share-row input { flex: 1; font-family: ui-monospace, monospace; font-size: 12px; }
+
+/* Page publique : pas de barre de navigation, l'en-tête porte l'identité. */
+.public-head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+.public-head img.logo { height: 40px; }
+
+/* Texte réservé aux lecteurs d'écran : sur la page publique, une cellule
+   colorée est la seule information — il lui faut un équivalent lisible. */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}

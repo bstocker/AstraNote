@@ -112,6 +112,16 @@ def visible_years_query():
     return q.order_by(AcademicYear.label.desc())
 
 
+def selected_year_id(years):
+    """Année académique retenue : celle de l'URL (?year=) si elle est visible,
+    sinon la plus récente. Partagée par le tableau de bord et le planning, pour
+    que passer de l'un à l'autre ne change pas d'année sous les pieds."""
+    wanted = request.args.get("year", type=int)
+    if wanted in {y.id for y in years}:
+        return wanted
+    return years[0].id if years else None
+
+
 def can_manage_owned(obj):
     """Vrai si l'utilisateur peut modifier/supprimer une école/année.
 
@@ -133,19 +143,14 @@ def strip_accents(text):
 @login_required
 def dashboard():
     years = visible_years_query().all()
-
-    # Année sélectionnée : celle de l'URL si valide, sinon la plus récente.
-    selected_year_id = request.args.get("year", type=int)
-    valid_year_ids = {y.id for y in years}
-    if selected_year_id not in valid_year_ids:
-        selected_year_id = years[0].id if years else None
+    year_id = selected_year_id(years)
 
     # Classes visibles de l'année choisie, regroupées par école.
     groups = []
-    if selected_year_id:
+    if year_id:
         classes = (
             visible_classes_query()
-            .filter(Class.academic_year_id == selected_year_id)
+            .filter(Class.academic_year_id == year_id)
             .all()
         )
         by_school = {}
@@ -161,7 +166,7 @@ def dashboard():
 
     return render_template(
         "dashboard.html", years=years, groups=groups,
-        selected_year_id=selected_year_id, stats=stats,
+        selected_year_id=year_id, stats=stats,
     )
 
 
