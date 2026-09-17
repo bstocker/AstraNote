@@ -5,6 +5,12 @@ on:
     branches: ["main"]
   workflow_dispatch:
 
+# Deux déploiements simultanés se partagent le quota de l'API PythonAnywhere et
+# échouent tous les deux : on les met en file plutôt qu'en concurrence.
+concurrency:
+  group: deploy-pythonanywhere
+  cancel-in-progress: false
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -53,6 +59,25 @@ jobs:
           echo "Using PythonAnywhere host: ${HOST}"
           echo "Target directory: ${TARGET_DIR}"
 
+          # L'API PythonAnywhere plafonne à 40 requêtes par minute. Le dépôt
+          # compte une quarantaine de fichiers : envoyés à pleine vitesse, les
+          # derniers se font refuser (HTTP 429), l'upload s'arrête au milieu et
+          # la webapp n'est jamais rechargée — elle continue alors de servir
+          # l'ancien code. D'où ce rythme volontairement lent et ces réessais.
+          api_call() {  # api_call <description> <arguments curl...>
+            local what="$1"; shift
+            local wait=5 code attempt
+            for attempt in 1 2 3 4 5 6; do
+              code=$(curl -sS -o /dev/null -w '%{http_code}' "$@" || echo 000)
+              case "${code}" in 2*) return 0 ;; esac
+              echo "   ${what} : HTTP ${code} (tentative ${attempt}/6), attente ${wait}s"
+              sleep "${wait}"
+              if (( wait < 60 )); then wait=$(( wait * 2 )); fi
+            done
+            echo "::error::${what} : échec après 6 tentatives (HTTP ${code})"
+            return 1
+          }
+
           # Upload every file; remote directories are created automatically by the Files API.
           while IFS= read -r -d '' file; do
             rel="${file#./}"
@@ -69,11 +94,13 @@ jobs:
             remote_path="${TARGET_DIR}/${rel}"
             echo " - ${rel} -> ${remote_path}"
 
-            curl -sS --fail -X POST \
+            api_call "${rel}" -X POST \
               -H "Authorization: Token ${TOKEN}" \
               -F "content=@${file}" \
-              "https://${HOST}/api/v0/user/${USER}/files/path${remote_path}" \
-              >/dev/null
+              "https://${HOST}/api/v0/user/${USER}/files/path${remote_path}"
+
+            # ~1,6 s entre deux fichiers : sous la barre des 40 appels/minute.
+            sleep 1.6
 
           done < <(
             find . \
@@ -88,9 +115,8 @@ jobs:
           )
 
           echo "Reloading webapp ${DOMAIN}..."
-          curl -sS --fail -X POST \
+          api_call "rechargement de ${DOMAIN}" -X POST \
             -H "Authorization: Token ${TOKEN}" \
-            "https://${HOST}/api/v0/user/${USER}/webapps/${DOMAIN}/reload/" \
-            >/dev/null
+            "https://${HOST}/api/v0/user/${USER}/webapps/${DOMAIN}/reload/"
 
           echo "Deployed. Try: https://${DOMAIN}/"
