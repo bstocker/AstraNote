@@ -118,6 +118,11 @@ class GradeDate(db.Model):
     label = db.Column(db.String(120))
     date = db.Column(db.Date, default=date_type.today)
     position = db.Column(db.Integer, default=0)
+    # Durée de la séance en heures (1, 2, 2.5...). Facultative : les séances
+    # créées avant cette colonne n'en ont pas, et une séance peut rester sans
+    # durée connue. Sert au cumul d'heures du module (cf. taux horaire de la
+    # classe), jamais au calcul des notes.
+    duration_hours = db.Column(db.Float)
 
     star_columns = db.relationship(
         "StarColumn", backref="grade_date", cascade="all, delete-orphan",

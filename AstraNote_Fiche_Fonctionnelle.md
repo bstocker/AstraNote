@@ -135,7 +135,7 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
 - CRUD **modules** au sein d'une classe.
 - À la création d'un module, choix du **mode de travail** : **individuel** ou **en groupe**.
 - **Édition d'un module** : nom et **deux liens Discord** (URL cliquables) : le **lien Discord** du module (salon de travail) et le **Discord de référence** (salon de ressources/consignes). Les deux sont facultatifs et indépendants. Le mode de travail n'est **pas** modifiable après création (il conditionne groupes et notes déjà saisis).
-- Ajout de **dates** (séances) dans un module.
+- Ajout de **dates** (séances) dans un module, avec une **durée en heures** facultative (1, 2, 2,5…). Elle est modifiable après coup, et le **cumul des heures** du module est rappelé sur le bandeau des séances. Elle n'entre **pas** dans le calcul des notes.
 - **Plusieurs colonnes d'étoiles par date** : une date peut porter autant d'exercices (colonnes) que nécessaire.
 - **Ajout d'une colonne d'étoiles à tout moment**, y compris sur une date **existante**, avec un intitulé (ex. « CMAKE », « Projet »).
 - **Ajout de colonnes URL** rattachées à une date, contenant un lien par étudiant/groupe (dépôt GitHub, rapport, lab…), cliquable.
@@ -158,6 +158,8 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
 - **Étudiants sans groupe** : un encart met en évidence les étudiants **actifs** de la classe **non encore affectés** à un groupe (avec leur nombre), et permet de les affecter directement. Les étudiants **neutralisés** (ayant quitté l'école) n'ont pas besoin de groupe et **n'y figurent pas**. Un message confirme lorsque tous les étudiants actifs sont affectés.
 - La suite du processus est **identique** au mode individuel — étoiles, notes, commentaire — mais s'applique au **groupe entier** (une ligne par groupe au lieu d'une ligne par étudiant).
 - **Dépliage d'un groupe** : un chevron sur la ligne du groupe affiche ses membres (repliés par défaut, le nombre de membres est rappelé à côté du nom). Chaque membre dispose d'une **ligne de saisie complète** — étoiles, liens, notes manuelles, commentaire et couleur de cellule — indépendante de celle du groupe (cf. R12).
+- **Pliage / dépliage de tous les groupes en un clic**, au-dessus de la grille. Le bouton annonce ce qu'il va faire (« Tout déplier » tant qu'un groupe reste plié). Les chevrons de chaque groupe restent maîtres du leur : replier un groupe isolément après un dépliage global reste possible, et le bouton global s'aligne sur l'état réel.
+- La **zone de constitution des groupes** (création, affectation, étudiants sans groupe) est **repliable**, comme les autres zones de création : on constitue les groupes une fois, on note tout le semestre. Elle reste ouverte d'office tant qu'aucun groupe n'existe, et son intitulé rappelle le nombre de groupes ainsi que l'alerte « étudiants sans groupe », qui ne doit pas disparaître avec le panneau.
 
 ### 5.5 Vue module et saisie des étoiles
 - L'ouverture d'un module affiche un **tableau** unique servant à la fois à **consulter** et à **saisir les étoiles**.
@@ -172,6 +174,10 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
 - Les **étudiants neutralisés** sont regroupés **en bas** du tableau, grisés, et leurs cellules sont **en lecture seule** (aucune saisie possible).
 - La cellule **Étudiant** (ou **Groupe**) peut recevoir une **couleur de fond** au choix — **vert**, **jaune**, **rouge** ou **gris** — via une petite palette dans la cellule ; la signification est libre (repérage visuel de l'enseignant). La couleur est **propre au module** : un même étudiant peut être vert dans un module et rouge dans un autre. Elle n'a **aucun effet sur les calculs**.
 - Le **pseudo Discord** de l'étudiant est rappelé sous son nom (s'il est renseigné), pour l'identifier pendant la saisie.
+- **Sélection de séances** : le bandeau au-dessus de la grille liste **toutes** les séances du module (celles sans date comprises), chacune sélectionnable / désélectionnable au clic. Une séance retenue passe **en surbrillance** ; rien n'est masqué à ce stade.
+- **« Afficher la sélection »** restreint alors la zone de notation aux **seules séances retenues** ; **« Afficher toutes les séances »** revient à l'affichage complet. L'affichage **par défaut est l'affichage de toutes les séances** — aucun filtre n'est actif à l'ouverture d'un module.
+- Un bandeau signale qu'un filtre est actif et combien de séances sont affichées, pour qu'une séance masquée ne passe pas pour une séance perdue. La sélection **survit au rechargement** qui suit un enregistrement, et une entrée créée sur une séance écartée la ramène automatiquement dans la sélection.
+- Chaque séance garde un raccourci **⇥** de saut direct dans la grille, utile tant que tout est affiché.
 
 ### 5.6 Calcul et affichage de la note d'étoiles
 - Calcul automatique de la **note /20 au prorata**, arrondie au 0,5 (règles R1–R9).
@@ -232,7 +238,7 @@ Teacher(id, name, email, password_hash, role) # role = admin | teacher
 Class(id, name, school_id, academic_year_id, teacher_id, hourly_rate)  # hourly_rate = taux horaire €/h
 Module(id, name, discord_url, discord_ref_url, class_id, work_mode,   # work_mode = individual | group
        notes_sent, notes_sent_date, notes_sent_method, notes_sent_detail)  # transmission des notes à l'établissement
-GradeDate(id, module_id, label, date, position)      # une date/séance
+GradeDate(id, module_id, label, date, position, duration_hours)  # une date/séance ; duration_hours = durée en heures (facultative)
 StarColumn(id, grade_date_id, title, position)        # colonne d'étoiles ; title = titre de l'exercice
 UrlColumn(id, grade_date_id, title, position)         # colonne de liens rattachée à une date
 NoteColumn(id, module_id, title, position)            # "Note CC", "Note Examen"... (affichage fond jaune, gras)

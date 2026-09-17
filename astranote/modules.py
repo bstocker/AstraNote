@@ -33,6 +33,11 @@ NOTES_METHODS = {
 }
 
 
+# Durée maximale acceptée pour une séance : au-delà, c'est une faute de frappe
+# (« 20 » pour « 2.0 ») plutôt qu'une journée de cours de 25 heures.
+MAX_DURATION_HOURS = 24
+
+
 # Libellés des couleurs de cellule (infobulles de la palette).
 SUBJECT_COLOR_LABELS = {
     "green": "Vert", "yellow": "Jaune", "red": "Rouge", "grey": "Gris",
@@ -40,9 +45,13 @@ SUBJECT_COLOR_LABELS = {
 
 
 @modules_bp.app_context_processor
-def _inject_notes_methods():
-    """Rend NOTES_METHODS disponible dans tous les templates."""
-    return {"notes_methods": NOTES_METHODS}
+def _inject_module_constants():
+    """Constantes dont les gabarits ont besoin (libellés d'envoi, borne de durée).
+
+    La borne passe par ici pour que le `max` du champ de saisie et le contrôle
+    serveur ne puissent pas diverger.
+    """
+    return {"notes_methods": NOTES_METHODS, "max_duration": MAX_DURATION_HOURS}
 
 
 # --------------------------------------------------------------------------- #
@@ -69,6 +78,33 @@ def _module_redirect(module, anchor=None):
     """
     return redirect(url_for("modules.view_module", module_id=module.id,
                             _anchor=anchor))
+
+
+def parse_duration(raw):
+    """Durée d'une séance en heures, ou None si le champ est vide.
+
+    Accepte la virgule décimale (« 2,5 »), comme le taux horaire d'une classe :
+    un clavier français la produit naturellement. Lève ValueError sur une
+    saisie illisible ou hors bornes, à charge de l'appelant de le signaler —
+    une durée fautive ne doit pas empêcher la séance d'exister.
+    """
+    text = (raw or "").strip().replace(",", ".")
+    if not text:
+        return None
+    hours = float(text)   # ValueError si illisible
+    if not (0 < hours <= MAX_DURATION_HOURS):
+        raise ValueError(f"durée hors de 0–{MAX_DURATION_HOURS} h")
+    return hours
+
+
+def module_total_hours(module):
+    """Cumul des heures des séances du module (None si aucune durée saisie).
+
+    Renvoyer None plutôt que 0 distingue « aucune durée renseignée » de
+    « des séances de durée nulle » — la seconde n'existe pas (cf. parse_duration).
+    """
+    hours = [gd.duration_hours for gd in module.grade_dates if gd.duration_hours]
+    return round(sum(hours), 2) if hours else None
 
 
 def module_dates_sorted(module, recent_first=False):
@@ -349,7 +385,7 @@ def view_module(module_id):
         all_tokens=grading.ALL_TOKENS, special_statuses=grading.SPECIAL_STATUSES,
         unassigned_active=unassigned_active,
         dates_asc=dates_asc, dates_desc=dates_desc, latest_date=latest_date,
-        hidden_inactive=hidden_inactive,
+        hidden_inactive=hidden_inactive, total_hours=module_total_hours(module),
     )
 
 
@@ -412,15 +448,28 @@ def add_date(module_id):
             parsed = datetime.strptime(raw_date, "%Y-%m-%d").date()
         except ValueError:
             parsed = None
+    # Une durée illisible ne fait pas échouer la création : la séance compte
+    # plus que son nombre d'heures, qui reste corrigeable depuis le panneau de
+    # gestion. On le dit, sinon l'enseignant croirait l'avoir enregistrée.
+    try:
+        duration = parse_duration(request.form.get("duration_hours"))
+        duration_error = False
+    except ValueError:
+        duration, duration_error = None, True
+
     gd = GradeDate(
         module_id=module.id,
         label=request.form.get("label", "").strip() or None,
         date=parsed,
+        duration_hours=duration,
         position=_next_position(module.grade_dates),
     )
     db.session.add(gd)
     db.session.commit()
     flash("Date/séance ajoutée.", "success")
+    if duration_error:
+        flash(f"Durée non enregistrée : indiquez un nombre d'heures entre 0 et "
+              f"{MAX_DURATION_HOURS} (ex. 1, 2 ou 2,5).", "error")
     return _module_redirect(module, f"date-{gd.id}")
 
 
@@ -671,8 +720,20 @@ def edit_date(date_id):
         except ValueError:
             pass
     gd.label = request.form.get("label", "").strip() or None
+    # Champ présent mais vide = durée effacée ; champ absent du formulaire =
+    # durée inchangée (un futur formulaire partiel ne l'écrasera pas).
+    error = None
+    if "duration_hours" in request.form:
+        try:
+            gd.duration_hours = parse_duration(request.form["duration_hours"])
+        except ValueError:
+            error = (f"Durée invalide : indiquez un nombre d'heures entre 0 et "
+                     f"{MAX_DURATION_HOURS} (ex. 1, 2 ou 2,5). Elle est restée "
+                     f"inchangée.")
     db.session.commit()
     flash("Date mise à jour.", "success")
+    if error:
+        flash(error, "error")
     return _module_redirect(module, f"date-{gd.id}")
 
 

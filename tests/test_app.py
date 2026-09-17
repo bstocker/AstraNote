@@ -1356,12 +1356,13 @@ def test_jump_bar_is_chronological_latest_starred(app, admin):
         by_date = {g.date.isoformat(): g.id for g in GradeDate.query.all()}
     html = admin.get(f"/modules/{mid}").get_data(as_text=True)
     chips = html.split('grid-nav-chips')[1].split('</div>')[0]
-    assert re.findall(r'data-jump="date-(\d+)"', chips) == [
-        str(by_date["2025-09-10"]), str(by_date["2025-10-01"]),
-        str(by_date["2025-11-02"]),
-    ]
+    chrono = [str(by_date["2025-09-10"]), str(by_date["2025-10-01"]),
+              str(by_date["2025-11-02"])]
+    # Les deux gestes d'une puce — sélectionner, sauter — suivent le même ordre.
+    assert re.findall(r'data-select="(\d+)"', chips) == chrono
+    assert re.findall(r'data-jump="date-(\d+)"', chips) == chrono
     # L'étoile et la mise en avant vont à la dernière puce, la plus récente.
-    starred = re.findall(r'data-jump="date-(\d+)"[^>]*>\s*[\d/]+ ★', chips)
+    starred = re.findall(r'data-select="(\d+)"[^>]*>\s*[\d/]+ ★', chips)
     assert starred == [str(by_date["2025-11-02"])]
     assert chips.count("chip latest") == 1
 
@@ -1525,3 +1526,262 @@ def test_frozen_cells_stacking_order(app, admin):
     # Figé sur un seul axe : doit passer sous ce qui est figé sur l'autre.
     assert body_subject < head_titles < head_dates < corner, (
         body_subject, head_titles, head_dates, corner)
+
+
+# --------------------------------------------------------------------------- #
+# Durée d'une séance (heures)
+# --------------------------------------------------------------------------- #
+def test_session_duration_saved_and_displayed(app, admin):
+    """La durée saisie à la création est enregistrée, cumulée et affichée."""
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    admin.post(f"/modules/{mid}/dates", data={"date": "2025-09-30", "duration_hours": "2"})
+    admin.post(f"/modules/{mid}/dates", data={"date": "2025-10-07", "duration_hours": "2,5"})
+
+    with app.app_context():
+        durations = [gd.duration_hours for gd in
+                     GradeDate.query.order_by(GradeDate.id).all()]
+        assert durations == [2.0, 2.5]
+
+    html = admin.get(f"/modules/{mid}").get_data(as_text=True)
+    # Écriture française, et pas le « 2.0 » d'un Float SQLite.
+    assert "2 h" in html and "2,5 h" in html
+    assert "2.0 h" not in html
+    assert "4,5 h" in html          # cumul du module dans le bandeau
+
+
+def test_session_duration_is_optional_and_totals_ignore_it(app, admin):
+    """Sans aucune durée saisie, pas de cumul affiché — et surtout pas « 0 h »."""
+    from astranote.modules import module_total_hours
+
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    admin.post(f"/modules/{mid}/dates", data={"date": "2025-09-30"})
+    with app.app_context():
+        module = db.session.get(Module, mid)
+        assert module.grade_dates[0].duration_hours is None
+        assert module_total_hours(module) is None
+    assert "nav-hours" not in admin.get(f"/modules/{mid}").get_data(as_text=True)
+
+
+def test_invalid_duration_still_creates_the_session(app, admin):
+    """Une durée fautive est signalée, mais la séance existe quand même.
+
+    Le nombre d'heures est un détail corrigeable ; perdre la séance obligerait
+    à la recréer avec ses colonnes.
+    """
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    for bad in ("abc", "30", "0", "-2"):
+        r = admin.post(f"/modules/{mid}/dates",
+                       data={"date": "2025-09-30", "duration_hours": bad},
+                       follow_redirects=True)
+        assert "Durée non enregistrée" in r.get_data(as_text=True), bad
+    # Le formulaire et le contrôle serveur partagent la même borne.
+    from astranote.modules import MAX_DURATION_HOURS
+    assert f'max="{MAX_DURATION_HOURS}"' in admin.get(f"/modules/{mid}").get_data(as_text=True)
+    with app.app_context():
+        dates = GradeDate.query.all()
+        assert len(dates) == 4
+        assert all(gd.duration_hours is None for gd in dates)
+
+
+def test_session_duration_editable_and_clearable(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    admin.post(f"/modules/{mid}/dates", data={"date": "2025-09-30", "duration_hours": "2"})
+    with app.app_context():
+        did = GradeDate.query.first().id
+
+    admin.post(f"/dates/{did}/edit", data={"date": "2025-09-30", "duration_hours": "3,5"})
+    with app.app_context():
+        assert db.session.get(GradeDate, did).duration_hours == 3.5
+
+    # Champ présent mais vide = durée effacée.
+    admin.post(f"/dates/{did}/edit", data={"date": "2025-09-30", "duration_hours": ""})
+    with app.app_context():
+        assert db.session.get(GradeDate, did).duration_hours is None
+
+    # Valeur illisible : signalée, et la durée précédente n'est pas perdue.
+    admin.post(f"/dates/{did}/edit", data={"date": "2025-09-30", "duration_hours": "2"})
+    r = admin.post(f"/dates/{did}/edit",
+                   data={"date": "2025-09-30", "duration_hours": "n'importe quoi"},
+                   follow_redirects=True)
+    assert "Durée invalide" in r.get_data(as_text=True)
+    with app.app_context():
+        assert db.session.get(GradeDate, did).duration_hours == 2.0
+
+    # Formulaire sans le champ du tout : durée inchangée.
+    admin.post(f"/dates/{did}/edit", data={"date": "2025-09-30", "label": "TP"})
+    with app.app_context():
+        assert db.session.get(GradeDate, did).duration_hours == 2.0
+
+
+# --------------------------------------------------------------------------- #
+# Sélection de séances et filtrage de la zone de notation
+# --------------------------------------------------------------------------- #
+def test_every_session_is_selectable_in_the_band(app, admin):
+    """Toutes les séances du module figurent au bandeau, sélectionnables."""
+    import re
+
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    for d in ("2025-09-10", "2025-10-01"):
+        admin.post(f"/modules/{mid}/dates", data={"date": d})
+    admin.post(f"/modules/{mid}/dates", data={"label": "Sans date"})
+    with app.app_context():
+        undated = GradeDate.query.filter_by(label="Sans date").one()
+        undated.date = None
+        db.session.commit()
+        all_ids = {str(gd.id) for gd in GradeDate.query.all()}
+
+    chips = (admin.get(f"/modules/{mid}").get_data(as_text=True)
+             .split("grid-nav-chips")[1].split("</div>")[0])
+    # La séance sans date comprise : elle est notable, donc sélectionnable.
+    assert set(re.findall(r'data-select="(\d+)"', chips)) == all_ids
+    assert chips.count('aria-pressed="false"') == len(all_ids)
+
+
+def test_filter_controls_default_to_showing_everything(app, admin):
+    """Affichage par défaut : tout ; le filtre ne part pas armé."""
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    add_star_column(app, admin, mid)
+    html = admin.get(f"/modules/{mid}").get_data(as_text=True)
+
+    assert 'id="selectAllDates"' in html
+    assert 'id="showAllDates"' in html
+    # Rien de sélectionné au départ : le bouton d'affichage reste inerte, et le
+    # retour à l'affichage complet n'a pas lieu d'être proposé.
+    assert 'id="showSelection" disabled' in html
+    assert 'id="showAllDates" hidden' in html
+    assert 'id="filterStatus" hidden' in html
+    assert "selected" not in html.split("grid-nav-chips")[1].split("</div>")[0]
+
+
+def test_grid_columns_are_tagged_with_their_session(app, admin):
+    """Chaque colonne porte sa séance : c'est ce qui rend le filtrage possible."""
+    import re
+    from datetime import date
+
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    did, scid = add_star_column(app, admin, mid)
+    admin.post(f"/dates/{did}/url-columns", data={"title": "Dépôt"})
+    admin.post(f"/dates/{did}/text-columns", data={"title": "Remarque"})
+    admin.post(f"/modules/{mid}/dates", data={"date": "2025-10-07"})   # séance nue
+    with app.app_context():
+        other = GradeDate.query.filter_by(date=date(2025, 10, 7)).one().id
+
+    html = admin.get(f"/modules/{mid}").get_data(as_text=True)
+    head = html.split("<thead>")[1].split("</thead>")[0]
+    body = html.split("<tbody>")[1].split("</tbody>")[0]
+
+    # En-tête de séance, intitulés de colonnes, et cellules de saisie.
+    assert f'id="date-{did}" data-date="{did}"' in head
+    for anchor in (f'id="col-star-{scid}"', 'class="url-head"', 'class="text-head"'):
+        col = head.split(anchor)[1].split(">")[0]
+        assert f'data-date="{did}"' in col, anchor
+    for kind in ("star-cell", "url-cell", "text-cell"):
+        assert re.search(rf'{kind}[^>]*data-date="{did}"', body), kind
+
+    # Une séance sans colonne garde une cellule de remplissage, marquée aussi :
+    # sans cela le filtre la laisserait derrière lui.
+    assert f'data-date="{other}"' in body
+    assert len(re.findall(rf'data-date="{other}"', head)) == 2   # date + placeholder
+
+
+def test_filtering_is_implemented_client_side(app, admin):
+    """Le filtre masque les colonnes des séances non retenues, et le dit."""
+    js = admin.get("/static/js/grid.js").get_data(as_text=True)
+    assert 'grid.querySelectorAll("[data-date]")' in js
+    assert "cell.hidden = filtering && !selected.has(cell.dataset.date)" in js
+    # La sélection survit au rechargement qui suit un POST.
+    assert "sessionStorage.setItem(KEY" in js
+
+    css = admin.get("/static/css/style.css").get_data(as_text=True)
+    assert "table.grid [hidden] { display: none !important; }" in css
+
+
+# --------------------------------------------------------------------------- #
+# Groupes : pliage global et zone de constitution repliable
+# --------------------------------------------------------------------------- #
+def test_fold_all_groups_button_only_in_group_mode(app, admin):
+    cid, mid, gid, ids, enr = bootstrap_group_module(app, admin)
+    html = admin.get(f"/modules/{mid}").get_data(as_text=True)
+    assert 'id="foldAll"' in html
+    assert "Tout déplier" in html
+    # Les chevrons de chaque groupe restent là : le global ne les remplace pas.
+    assert "fold-toggle" in html
+
+    # Module individuel de la même classe : rien à plier, donc pas de bouton.
+    admin.post(f"/classes/{cid}/modules/new",
+               data={"name": "Solo", "work_mode": "individual"})
+    with app.app_context():
+        solo = Module.query.filter_by(name="Solo").one().id
+    assert 'id="foldAll"' not in admin.get(f"/modules/{solo}").get_data(as_text=True)
+
+
+def test_fold_all_absent_while_no_member_is_assigned(app, admin):
+    """Groupe encore vide : rien à plier, donc pas de bouton qui ne fait rien."""
+    cid, mid, ids, enr = bootstrap_class(app, admin, work_mode="group")
+    admin.post(f"/modules/{mid}/groups", data={"name": "G1"})
+    assert 'id="foldAll"' not in admin.get(f"/modules/{mid}").get_data(as_text=True)
+
+    with app.app_context():
+        gid = Group.query.one().id
+    admin.post(f"/groups/{gid}/members", data={"student_id": ids["Alice"]})
+    assert 'id="foldAll"' in admin.get(f"/modules/{mid}").get_data(as_text=True)
+
+
+def test_fold_all_and_individual_toggles_share_one_path(app, admin):
+    """Un groupe déplié à la main garde la main : même fonction, même état."""
+    js = admin.get("/static/js/grid.js").get_data(as_text=True)
+    assert "function setGroupOpen(btn, open)" in js
+    # Le bouton global annonce ce qu'il fera, d'où la relecture de l'état réel.
+    assert "foldToggles.every((b) => b.getAttribute(\"aria-expanded\") === \"true\")" in js
+    assert "foldToggles.forEach((btn) => setGroupOpen(btn, open))" in js
+
+
+def test_groups_zone_is_foldable(app, admin):
+    """Zone de constitution des groupes : repliée, mais pas silencieuse."""
+    cid, mid, ids, enr = bootstrap_class(app, admin, students=("Alice", "Bob"),
+                                         work_mode="group")
+    # Aucun groupe encore : la zone s'ouvre d'office, il n'y a rien d'autre à faire.
+    html = admin.get(f"/modules/{mid}").get_data(as_text=True)
+    assert '<details class="tool" id="tools-groups" open>' in html
+
+    admin.post(f"/modules/{mid}/groups", data={"name": "G1"})
+    html = admin.get(f"/modules/{mid}").get_data(as_text=True)
+    assert '<details class="tool" id="tools-groups">' in html
+    # Repliée, elle doit tout de même laisser voir ce qui reste à faire.
+    summary = html.split('id="tools-groups"')[1].split("</summary>")[0]
+    assert "1 groupe(s)" in summary
+    assert "2 étudiant(s) sans groupe" in summary
+
+
+def test_duration_column_added_to_an_existing_database(tmp_path):
+    """Base déjà en production : la colonne de durée y est ajoutée au démarrage.
+
+    `db.create_all()` ne touche jamais à une table existante. Sans la migration
+    légère, la grille d'une base antérieure répondrait 500 sur un `SELECT`
+    mentionnant une colonne absente — c'est-à-dire tout de suite.
+    """
+    import sqlite3
+
+    db_file = tmp_path / "ancienne.db"
+    con = sqlite3.connect(db_file)
+    # Table dans sa forme d'avant, avec une séance déjà saisie.
+    con.execute("CREATE TABLE grade_date (id INTEGER PRIMARY KEY,"
+                " module_id INTEGER NOT NULL, label VARCHAR(120), date DATE,"
+                " position INTEGER)")
+    con.execute("INSERT INTO grade_date (id, module_id, label, position)"
+                " VALUES (1, 1, 'TP réseau', 0)")
+    con.commit()
+    con.close()
+
+    class OldDbConfig(TestConfig):
+        SQLALCHEMY_DATABASE_URI = f"sqlite:///{db_file}"
+
+    old_app = create_app(OldDbConfig)
+    with old_app.app_context():
+        gd = db.session.get(GradeDate, 1)
+        assert gd.label == "TP réseau"
+        # La séance existante n'a pas de durée, et n'en invente pas.
+        assert gd.duration_hours is None
+        gd.duration_hours = 2.5
+        db.session.commit()
+        assert db.session.get(GradeDate, 1).duration_hours == 2.5

@@ -58,6 +58,17 @@ def create_app(config_object=Config):
     def stars_display(value):
         return grading.display_token(value)
 
+    @app.template_filter("hours")
+    def hours(value):
+        """Durée en heures telle qu'on l'écrit : « 2 », « 2,5 ».
+
+        Un Float SQLite s'affiche « 2.0 » et « 2.5 » : ni l'un ni l'autre ne
+        correspond à ce qu'un enseignant francophone lit sur un emploi du temps.
+        """
+        if value is None:
+            return ""
+        return f"{value:.2f}".rstrip("0").rstrip(".").replace(".", ",")
+
     with app.app_context():
         db.create_all()
         _run_migrations(app)
@@ -105,6 +116,8 @@ def _run_migrations(app):
     add_column_if_missing("school", "billing_emails", "VARCHAR(500)")
     add_column_if_missing("school", "observation", "TEXT")
     add_column_if_missing("class", "hourly_rate", "FLOAT")
+    # Évolution : durée d'une séance en heures.
+    add_column_if_missing("grade_date", "duration_hours", "FLOAT")
 
     # Réparation : affectations de groupe pointant vers un étudiant supprimé.
     # Avant la cascade `Student.group_memberships`, retirer un étudiant de sa

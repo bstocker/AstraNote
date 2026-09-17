@@ -195,15 +195,44 @@
   });
 
   // --- Dépliage d'un groupe : afficher / masquer ses membres ---
-  grid.querySelectorAll(".fold-toggle").forEach((btn) => {
+  // Le chevron de chaque groupe et le bouton « Tout déplier » passent par la
+  // même fonction : l'un reste donc toujours le reflet de l'autre, et déplier
+  // un seul groupe après un pliage global n'a rien de particulier à gérer.
+  const foldToggles = Array.from(grid.querySelectorAll(".fold-toggle"));
+  const foldAllBtn = document.getElementById("foldAll");
+
+  function setGroupOpen(btn, open) {
+    btn.setAttribute("aria-expanded", String(open));
+    btn.textContent = open ? "▾" : "▸";
+    grid.querySelectorAll(`tr.member-row[data-group="${btn.dataset.group}"]`)
+      .forEach((tr) => { tr.hidden = !open; });
+  }
+
+  // Le bouton global annonce ce qu'il va faire : tant qu'un groupe reste plié,
+  // il déplie ; il ne propose de replier que lorsque tout est ouvert.
+  function syncFoldAllLabel() {
+    if (!foldAllBtn) return;
+    const allOpen = foldToggles.length > 0 &&
+      foldToggles.every((b) => b.getAttribute("aria-expanded") === "true");
+    foldAllBtn.dataset.expanded = String(allOpen);
+    foldAllBtn.textContent = allOpen ? "▸ Tout replier" : "▾ Tout déplier";
+  }
+
+  foldToggles.forEach((btn) => {
     btn.addEventListener("click", () => {
-      const open = btn.getAttribute("aria-expanded") === "true";
-      btn.setAttribute("aria-expanded", String(!open));
-      btn.textContent = open ? "▸" : "▾";
-      grid.querySelectorAll(`tr.member-row[data-group="${btn.dataset.group}"]`)
-        .forEach((tr) => { tr.hidden = open; });
+      setGroupOpen(btn, btn.getAttribute("aria-expanded") !== "true");
+      syncFoldAllLabel();
     });
   });
+
+  if (foldAllBtn) {
+    foldAllBtn.addEventListener("click", () => {
+      const open = foldAllBtn.dataset.expanded !== "true";
+      foldToggles.forEach((btn) => setGroupOpen(btn, open));
+      syncFoldAllLabel();
+    });
+    syncFoldAllLabel();
+  }
 
   // --- Défilement : sauts de séance et retour sur la dernière entrée ---
   const wrap = document.getElementById("gridWrap");
@@ -226,6 +255,134 @@
     setTimeout(() => el.classList.remove("just-added"), 1900);
   }
 
+  // --- Sélection de séances et filtrage de la zone de notation -------------
+  // Deux temps distincts, comme on travaille : on désigne d'abord les séances
+  // qui intéressent (surbrillance), puis on demande à ne voir qu'elles. Rien
+  // n'est filtré par défaut — une grille montre tout tant qu'on ne demande pas
+  // l'inverse.
+  // Assignée par le bloc de sélection ci-dessous, appelée par la restauration
+  // d'ancre plus bas : une entrée créée sur une séance écartée doit rester
+  // visible, sinon l'ajout paraît n'avoir rien produit.
+  let revealDate = null;
+
+  const nav = document.getElementById("gridNav");
+  if (nav) {
+    const pickers = Array.from(nav.querySelectorAll(".chip-pick"));
+    const showSelBtn = document.getElementById("showSelection");
+    const showAllBtn = document.getElementById("showAllDates");
+    const selectAllBtn = document.getElementById("selectAllDates");
+    const status = document.getElementById("filterStatus");
+    // La sélection survit au rechargement qui suit un POST (ajout de colonne,
+    // renommage…) : la reperdre à chaque enregistrement la rendrait inutile.
+    const KEY = nav.dataset.selectKey;
+
+    const selected = new Set();
+    let filtering = false;
+
+    function save() {
+      try {
+        sessionStorage.setItem(KEY, JSON.stringify({
+          dates: Array.from(selected), filtering: filtering,
+        }));
+      } catch (e) { /* stockage indisponible : la sélection vit le temps de la page */ }
+    }
+
+    function paint() {
+      pickers.forEach((b) => {
+        const on = selected.has(b.dataset.select);
+        b.setAttribute("aria-pressed", String(on));
+        const chip = b.closest(".chip");
+        if (chip) chip.classList.toggle("selected", on);
+      });
+      if (showSelBtn) showSelBtn.disabled = selected.size === 0;
+      if (showAllBtn) showAllBtn.hidden = !filtering;
+      if (selectAllBtn) {
+        const all = selected.size === pickers.length && pickers.length > 0;
+        selectAllBtn.textContent = all ? "Tout désélectionner" : "Tout sélectionner";
+      }
+      if (status) {
+        status.hidden = !filtering;
+        status.textContent = filtering
+          ? `Affichage limité à ${selected.size} séance(s) sur ${pickers.length}. `
+            + "Les autres sont masquées, rien n'est perdu."
+          : "";
+      }
+    }
+
+    // Une colonne appartient à une séance via data-date (posé sur l'en-tête de
+    // la séance, sur chaque intitulé de colonne et sur chaque cellule) : le
+    // filtrage se résume donc à masquer ce qui ne porte pas un id retenu.
+    function applyFilter() {
+      grid.querySelectorAll("[data-date]").forEach((cell) => {
+        cell.hidden = filtering && !selected.has(cell.dataset.date);
+      });
+      syncHeadOffset();   // moins de colonnes = en-tête possiblement plus court
+      paint();
+    }
+
+    pickers.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.dataset.select;
+        if (selected.has(id)) selected.delete(id); else selected.add(id);
+        // Sélection vidée alors qu'un filtre tourne : tout masquer n'aurait
+        // aucun sens, on revient à l'affichage complet.
+        if (filtering && selected.size === 0) filtering = false;
+        save();
+        applyFilter();
+      });
+    });
+
+    if (selectAllBtn) {
+      selectAllBtn.addEventListener("click", () => {
+        if (selected.size === pickers.length) {
+          selected.clear();
+          filtering = false;
+        } else {
+          pickers.forEach((b) => selected.add(b.dataset.select));
+        }
+        save();
+        applyFilter();
+      });
+    }
+
+    if (showSelBtn) {
+      showSelBtn.addEventListener("click", () => {
+        if (selected.size === 0) return;
+        filtering = true;
+        save();
+        applyFilter();
+        // La grille vient de rétrécir : on repart de son début, sinon le
+        // défilement horizontal reste calé sur une colonne désormais masquée.
+        if (wrap) wrap.scrollTo({ left: 0, behavior: "smooth" });
+      });
+    }
+
+    if (showAllBtn) {
+      showAllBtn.addEventListener("click", () => {
+        filtering = false;
+        save();
+        applyFilter();
+      });
+    }
+
+    // État restauré avant tout affichage : les séances masquées ne doivent pas
+    // apparaître une fraction de seconde au rechargement.
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(KEY) || "{}");
+      const known = new Set(pickers.map((b) => b.dataset.select));
+      (saved.dates || []).forEach((id) => { if (known.has(id)) selected.add(id); });
+      filtering = !!saved.filtering && selected.size > 0;
+    } catch (e) { /* état illisible : on repart d'une grille entière */ }
+    applyFilter();
+
+    revealDate = (dateId) => {
+      if (!filtering || !dateId || selected.has(dateId)) return;
+      selected.add(dateId);
+      save();
+      applyFilter();
+    };
+  }
+
   // Amène `id` dans la zone visible de la grille. Le calcul passe par les
   // rectangles plutôt que par offsetLeft : la table n'est pas positionnée, et
   // offsetLeft se rapporterait alors au document entier.
@@ -237,6 +394,9 @@
     }
     const el = document.getElementById(id);
     if (!el) return;
+    // Cible masquée (séance écartée par le filtre) : ses rectangles sont vides
+    // et le calcul de défilement ramènerait la grille n'importe où.
+    if (!el.getClientRects().length) return;
     const wr = wrap.getBoundingClientRect();
     const er = el.getBoundingClientRect();
     if (el.tagName === "TR") {
@@ -289,7 +449,13 @@
       } catch (e) { /* position illisible : on laisse le navigateur décider */ }
     }
     if (location.hash.length > 1) {
-      focusTarget(decodeURIComponent(location.hash.slice(1)));
+      const target = decodeURIComponent(location.hash.slice(1));
+      // Ancre pointant dans une séance masquée par le filtre : on la ramène
+      // dans la sélection plutôt que de laisser l'enseignant devant une grille
+      // qui semble avoir ignoré son ajout.
+      const el = document.getElementById(target);
+      if (el && revealDate) revealDate(el.dataset.date);
+      focusTarget(target);
     }
   });
 

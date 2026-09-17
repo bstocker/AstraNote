@@ -23,16 +23,24 @@ finales restent saisies à la main par l'enseignant.
 ### Grille de notation
 
 - Modules **individuels** ou **en groupe**.
-- **Dates/séances**, **colonnes d'étoiles** (ajoutables à tout moment), **colonnes
-  URL**, **colonnes de commentaire libre** (une remarque propre à *cette* séance,
-  sans effet sur les étoiles ni sur la note), **colonnes de note manuelles**
-  (« Note CC », « Note Examen »…) ; toutes renommables et réordonnables.
+- **Dates/séances** avec **durée en heures** facultative (1, 2, 2,5…), modifiable
+  après coup et cumulée sur le bandeau des séances ; **colonnes d'étoiles**
+  (ajoutables à tout moment), **colonnes URL**, **colonnes de commentaire libre**
+  (une remarque propre à *cette* séance, sans effet sur les étoiles ni sur la
+  note), **colonnes de note manuelles** (« Note CC », « Note Examen »…) ; toutes
+  renommables et réordonnables.
 - **En-têtes figés** : la ligne des dates et celle des intitulés de colonnes
   restent visibles pendant le défilement vertical.
 - **Colonne « Étudiant » / « Groupe » figée** : les séances défilent
   horizontalement sous elle, ce qui écarte les séances anciennes sans jamais
   perdre de vue qui est noté. Barre de défilement dédiée et raccourcis
   « Aller à la séance », dont la **séance la plus récente**.
+- **Sélection de séances** : le bandeau liste *toutes* les séances du module ;
+  on clique celles qui intéressent (elles passent en surbrillance), puis
+  **« Afficher la sélection »** ne laisse qu'elles dans la zone de notation.
+  « Afficher toutes les séances » revient à l'affichage complet, qui reste
+  **celui par défaut**. La sélection survit à l'enregistrement suivant, et créer
+  une colonne sur une séance écartée la ramène dans la sélection.
 - Les zones de **création** (séances, colonnes, notes, Excel) sont **repliées**
   par défaut : l'écran est consacré au suivi des étudiants. Après un ajout, la
   page revient **sur la nouvelle entrée** plutôt qu'en haut de la grille.
@@ -46,6 +54,9 @@ finales restent saisies à la main par l'enseignant.
 - **Modules en groupe** : chaque groupe se **déplie** pour noter ses membres
   individuellement sur les mêmes colonnes. Le membre obtient un **total d'étoiles**
   propre, qui mesure sa contribution ; la seule note /20 reste celle du groupe.
+  Un bouton **plie / déplie tous les groupes d'un coup** sans retirer la main sur
+  chacun d'eux. La **zone de constitution des groupes** est repliable, et son
+  intitulé continue d'afficher l'alerte « étudiants sans groupe ».
 - Deux liens Discord par module (salon du module, salon de référence) et pseudo
   Discord affiché sous le nom de l'étudiant.
 
@@ -145,7 +156,11 @@ inverse des séances, les ancres de retour après création, l'édition de modul
 le suivi d'envoi des notes, le masquage des étudiants neutralisés
 dans la grille (sans perte de leurs étoiles, et saisie toujours refusée), la facturation, le classement, la progression du tableau
 de bord, les couleurs de cellule, la notation individuelle des membres d'un
-groupe, et les aller-retours Excel (notes d'un module, liste des étudiants).
+groupe, la durée des séances (virgule décimale, valeur fautive signalée sans
+perdre la séance, cumul), la sélection de séances et le marquage des colonnes
+dont dépend son filtrage, le pliage global des groupes et le repliage de leur
+zone de constitution, et les aller-retours Excel (notes d'un module, liste des
+étudiants).
 
 ## Déploiement (PythonAnywhere)
 

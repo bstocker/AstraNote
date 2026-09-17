@@ -97,28 +97,66 @@
 
 <!-- ---------------- Grille ---------------- -->
 {% if module.grade_dates %}
-{#- Raccourcis de défilement : la colonne « Étudiant » restant figée, sauter à
-    une séance revient à masquer les précédentes sans rien perdre du repérage. -#}
-<div class="grid-nav">
-  <span class="grid-nav-label">Aller à la séance</span>
-  {#- Ordre chronologique, comme la grille : la séance la plus récente ferme
-      la liste et porte l'étoile. -#}
+{#- Le bandeau porte deux gestes distincts sur la même séance : la cocher pour
+    la retenir dans une sélection, ou sauter jusqu'à elle dans la grille. D'où
+    deux boutons par pastille plutôt qu'un seul : la sélection est le geste
+    courant, le saut (⇥) reste utile tant que tout est affiché. -#}
+<div class="grid-nav" id="gridNav"
+     data-select-key="astranote:dates:{{ module.id }}">
+  <span class="grid-nav-label">Séances
+    {%- if total_hours %} <span class="nav-hours" title="Cumul des durées saisies">· {{ total_hours|hours }} h</span>{% endif %}
+  </span>
+  {#- Toutes les séances du module y figurent, dans l'ordre chronologique de la
+      grille : la plus récente ferme la liste et porte l'étoile. -#}
   <div class="grid-nav-chips">
     {% for gd in dates_asc %}
       {% set is_latest = latest_date and gd.id == latest_date.id %}
-      <button type="button" class="chip{{ ' latest' if is_latest else '' }}"
-              data-jump="date-{{ gd.id }}"
-              title="{{ gd.date.strftime('%d/%m/%Y') if gd.date else 'Sans date' }}{% if gd.label %} · {{ gd.label }}{% endif %}">
-        {{ gd.date.strftime('%d/%m/%y') if gd.date else '—' }}{% if is_latest %} ★{% endif %}
-      </button>
+      {% set gd_title = (gd.date.strftime('%d/%m/%Y') if gd.date else 'Sans date')
+                        ~ (' · ' ~ gd.label if gd.label else '')
+                        ~ (' · ' ~ gd.duration_hours|hours ~ ' h' if gd.duration_hours else '') %}
+      <span class="chip{{ ' latest' if is_latest else '' }}" data-date="{{ gd.id }}">
+        <button type="button" class="chip-pick" data-select="{{ gd.id }}"
+                aria-pressed="false"
+                title="{{ gd_title }} — cliquer pour sélectionner / désélectionner">
+          {{ gd.date.strftime('%d/%m/%y') if gd.date else '—' }}{% if is_latest %} ★{% endif %}
+          {%- if gd.duration_hours %} <span class="chip-h">{{ gd.duration_hours|hours }} h</span>{% endif %}
+        </button>
+        <button type="button" class="chip-jump" data-jump="date-{{ gd.id }}"
+                title="Aller à cette séance dans la grille"
+                aria-label="Aller à la séance {{ gd_title }}">⇥</button>
+      </span>
     {% endfor %}
   </div>
   <div class="grid-nav-actions">
+    <button type="button" class="btn secondary small" id="selectAllDates"
+            title="Sélectionner ou désélectionner toutes les séances">Tout sélectionner</button>
+    <button type="button" class="btn small" id="showSelection" disabled
+            title="N'afficher dans la zone de notation que les séances sélectionnées">👁 Afficher la sélection</button>
+    <button type="button" class="btn secondary small" id="showAllDates" hidden
+            title="Revenir à l'affichage de toutes les séances">Afficher toutes les séances</button>
     <button type="button" class="btn secondary small" data-jump="__start__" title="Revenir à la première séance">⇤ Début</button>
     {% if latest_date %}
     <button type="button" class="btn small" data-jump="date-{{ latest_date.id }}" title="Aller à la séance la plus récente">Dernière séance ⇥</button>
     {% endif %}
   </div>
+  {#- Quand un filtre est actif, la grille ne montre plus tout : le dire, sinon
+      une séance manquante passe pour une séance perdue. -#}
+  <p class="grid-nav-status" id="filterStatus" hidden></p>
+</div>
+{% endif %}
+{#- Pliage global : une classe de trente étudiants en dix groupes demande dix
+    clics pour tout ouvrir. Le bouton agit sur tous les groupes à la fois et ne
+    remplace pas les chevrons de chaque ligne, qui restent maîtres de leur
+    groupe. Aucun membre affecté : rien à plier, donc pas de bouton inerte. -#}
+{% set member_count = members.values()|map('length')|sum %}
+{% if module.is_group_mode and member_count %}
+<div class="grid-tools">
+  <button type="button" class="btn secondary small" id="foldAll"
+          data-expanded="false"
+          title="Déplier ou replier les membres de tous les groupes">▾ Tout déplier</button>
+  <span class="muted" style="font-size:12px;">
+    {{ members|length }} groupe(s) · {{ member_count }} membre(s)
+  </span>
 </div>
 {% endif %}
 <div class="grid-wrap" id="gridWrap" tabindex="0">
@@ -134,9 +172,12 @@
         <th class="subject" rowspan="2">{{ 'Groupe / Étudiant' if module.is_group_mode else 'Étudiant' }}</th>
         {% for gd in module.grade_dates %}
           {% set span = gd.star_columns|length + gd.url_columns|length + gd.text_columns|length %}
+          {#- data-date : seul lien entre une colonne et sa séance, dont se sert
+              le filtrage « afficher la sélection » pour masquer les colonnes. -#}
           <th class="date-head{{ ' latest' if latest_date and gd.id == latest_date.id else '' }}"
-              id="date-{{ gd.id }}" colspan="{{ span if span > 0 else 1 }}">
+              id="date-{{ gd.id }}" data-date="{{ gd.id }}" colspan="{{ span if span > 0 else 1 }}">
             {{ gd.date.strftime('%d/%m/%Y') if gd.date else '' }}{% if gd.label %} · {{ gd.label }}{% endif %}
+            {%- if gd.duration_hours %} <span class="date-hours" title="Durée de la séance">{{ gd.duration_hours|hours }} h</span>{% endif %}
             <form method="post" action="{{ url_for('modules.delete_date', date_id=gd.id) }}" style="display:inline;"
                   onsubmit="return confirm('Supprimer cette date et ses colonnes ?');">
 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -161,7 +202,7 @@
       <tr>
         {% for gd in module.grade_dates %}
           {% for sc in gd.star_columns %}
-            <th id="col-star-{{ sc.id }}">{{ sc.title }}
+            <th id="col-star-{{ sc.id }}" data-date="{{ gd.id }}">{{ sc.title }}
               <form method="post" action="{{ url_for('modules.delete_star_column', col_id=sc.id) }}" style="display:inline;"
                     onsubmit="return confirm('Supprimer cette colonne ?');">
 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -170,7 +211,7 @@
             </th>
           {% endfor %}
           {% for uc in gd.url_columns %}
-            <th class="url-head" id="col-url-{{ uc.id }}">{{ uc.title }} 🔗
+            <th class="url-head" id="col-url-{{ uc.id }}" data-date="{{ gd.id }}">{{ uc.title }} 🔗
               <form method="post" action="{{ url_for('modules.delete_url_column', col_id=uc.id) }}" style="display:inline;"
                     onsubmit="return confirm('Supprimer cette colonne ?');">
 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -179,7 +220,7 @@
             </th>
           {% endfor %}
           {% for tc in gd.text_columns %}
-            <th class="text-head" id="col-text-{{ tc.id }}">{{ tc.title }} 📝
+            <th class="text-head" id="col-text-{{ tc.id }}" data-date="{{ gd.id }}">{{ tc.title }} 📝
               <form method="post" action="{{ url_for('modules.delete_text_column', col_id=tc.id) }}" style="display:inline;"
                     onsubmit="return confirm('Supprimer cette colonne de commentaire ?');">
 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -188,7 +229,7 @@
             </th>
           {% endfor %}
           {% if gd.star_columns|length + gd.url_columns|length + gd.text_columns|length == 0 %}
-            <th class="muted" style="font-weight:400;">—</th>
+            <th class="muted" data-date="{{ gd.id }}" style="font-weight:400;">—</th>
           {% endif %}
         {% endfor %}
       </tr>
@@ -239,7 +280,7 @@
             {% set color = special_statuses.get(val) %}
             <td class="star-cell {{ 'st-' ~ color if color else '' }}"
                 data-subject="{{ subj.id }}" data-subject-type="{{ subj.type }}"
-                data-column="{{ sc.id }}">
+                data-date="{{ gd.id }}" data-column="{{ sc.id }}">
               <select class="star-select" {{ 'disabled' if not subj.active }}>
                 {% for tok in all_tokens %}
                   <option value="{{ tok }}" {{ 'selected' if val == tok else '' }}>
@@ -254,7 +295,8 @@
           {% for uc in gd.url_columns %}
             {% set uval = url_map.get((subj.type, subj.id, uc.id), '') %}
             <td class="url-cell" data-subject="{{ subj.id }}"
-                data-subject-type="{{ subj.type }}" data-column="{{ uc.id }}">
+                data-subject-type="{{ subj.type }}" data-date="{{ gd.id }}"
+                data-column="{{ uc.id }}">
               <input type="url" class="url-input" value="{{ uval or '' }}" placeholder="https://…" {{ 'disabled' if not subj.active }}>
               {% if uval %}<a href="{{ uval }}" target="_blank" rel="noopener">↗</a>{% endif %}
             </td>
@@ -262,11 +304,12 @@
           {% for tc in gd.text_columns %}
             {% set tval = text_map.get((subj.type, subj.id, tc.id), '') %}
             <td class="text-cell" data-subject="{{ subj.id }}"
-                data-subject-type="{{ subj.type }}" data-column="{{ tc.id }}">
+                data-subject-type="{{ subj.type }}" data-date="{{ gd.id }}"
+                data-column="{{ tc.id }}">
               <textarea class="text-input" placeholder="Remarque…" {{ 'disabled' if not subj.active }}>{{ tval or '' }}</textarea>
             </td>
           {% endfor %}
-          {% if gd.star_columns|length + gd.url_columns|length + gd.text_columns|length == 0 %}<td></td>{% endif %}
+          {% if gd.star_columns|length + gd.url_columns|length + gd.text_columns|length == 0 %}<td data-date="{{ gd.id }}"></td>{% endif %}
         {% endfor %}
         <td class="total" data-total-key="{{ subj.type }}:{{ subj.id }}">{{ total }}</td>
         <td class="note20 {{ 'ref' if is_ref else '' }}" data-note20-key="{{ subj.type }}:{{ subj.id }}"
@@ -328,6 +371,9 @@
 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div><label>Date</label><input type="date" name="date"></div>
       <div><label>Libellé (opt.)</label><input type="text" name="label" placeholder="TP réseau"></div>
+      <div style="flex:0 0 140px;"><label>Durée (h, opt.)</label>
+        <input type="number" name="duration_hours" step="0.5" min="0" max="{{ max_duration }}"
+               inputmode="decimal" placeholder="2,5"></div>
       <div style="flex:0 0 auto;"><button class="btn" type="submit">Ajouter</button></div>
     </form>
 
@@ -405,6 +451,10 @@
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <div style="flex:0 0 160px;"><input type="date" name="date" value="{{ gd.date.isoformat() if gd.date else '' }}"></div>
           <div><input type="text" name="label" value="{{ gd.label or '' }}" placeholder="Libellé de la séance"></div>
+          <div style="flex:0 0 110px;">
+            <input type="number" name="duration_hours" step="0.5" min="0" max="{{ max_duration }}"
+                   inputmode="decimal" placeholder="Durée (h)" title="Durée de la séance en heures"
+                   value="{{ gd.duration_hours|hours }}"></div>
           <div style="flex:0 0 auto;"><button class="btn small" type="submit">Enregistrer</button></div>
         </form>
         <div style="flex:0 0 auto; margin-left:8px;">
@@ -476,6 +526,16 @@
 
 <!-- ---------------- Groupes ---------------- -->
 {% if module.is_group_mode %}
+{#- Repliable, comme les autres zones de création : on constitue les groupes une
+    fois, on note pendant tout le semestre. Ouverte d'office tant qu'aucun groupe
+    n'existe — il n'y a alors rien d'autre à faire sur cette page. `grid.js`
+    mémorise ensuite l'état choisi. Le résumé porte le nombre de groupes et
+    l'alerte « sans groupe », qui ne doivent pas disparaître avec le panneau. -#}
+<details class="tool" id="tools-groups"{% if not module.groups %} open{% endif %}>
+  <summary>👥 Constitution des groupes
+    <span class="muted">({{ module.groups|length }} groupe(s){% if unassigned_active %}
+      · ⚠ {{ unassigned_active|length }} étudiant(s) sans groupe{% endif %})</span>
+  </summary>
 <div class="panel">
   <div class="flex-between">
     <h2>Groupes</h2>
@@ -545,6 +605,7 @@
   <p class="help">✓ Tous les étudiants actifs sont affectés à un groupe.</p>
   {% endif %}
 </div>
+</details>
 {% endif %}
 {% endblock %}
 
