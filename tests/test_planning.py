@@ -84,8 +84,18 @@ def test_planning_requires_login(client):
     assert client.post("/planning/slot", json={}).status_code == 302
 
 
-def test_planning_link_in_nav(admin):
-    assert "Planning" in admin.get("/").get_data(as_text=True)
+def test_planning_button_next_to_the_year_selector(app, admin):
+    """Le point d'entrée est le tableau de bord, sur l'année sélectionnée."""
+    year_id = make_year(app, admin)
+    html = admin.get("/").get_data(as_text=True)
+
+    assert f'href="/planning?year={year_id}"' in html
+    assert "📅 Planning" in html
+    # Le bouton est dans le formulaire du sélecteur d'année, pas dans le menu.
+    start = html.index("Année académique")   # le menu porte déjà un <form> avant
+    selector = html[start:html.index("</form>", start)]
+    assert "/planning" in selector
+    assert "/planning" not in html[:html.index("<main")]
 
 
 def test_planning_grid_rendered_for_selected_year(app, admin):

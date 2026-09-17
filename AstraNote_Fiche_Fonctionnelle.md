@@ -213,7 +213,7 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
 - Périmètre respectant les droits : l'enseignant cherche dans **ses** classes, l'administrateur dans toute la base.
 
 ### 5.11 Planning et partage des disponibilités
-- Accessible depuis le menu (**📅 Planning**), avec le même **sélecteur d'année académique** que le tableau de bord.
+- Accessible depuis le **tableau de bord**, bouton **📅 Planning** à droite du sélecteur d'année : le planning s'ouvre sur l'année sélectionnée.
 - **Année entière en synthèse** : une ligne par semaine, du **lundi au vendredi**, chaque journée coupée en **deux demi-journées** (matin / après-midi). Les semaines sont regroupées par mois ; la semaine en cours est repérée et atteignable d'un clic.
 - Les bornes de l'année sont **déduites du libellé** de l'année académique (« 2025-2026 » = 1er septembre 2025 → 31 août 2026). Les jours des semaines de bord qui sortent de l'année sont affichés inertes.
 - **Cocher une demi-journée** la réserve pour les cours : elle passe en **« Non disponible »** (rouge). Tout le reste est réputé disponible. L'enregistrement est immédiat (AJAX), sans bouton à valider.

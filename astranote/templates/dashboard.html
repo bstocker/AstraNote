@@ -26,6 +26,9 @@
         {% endfor %}
       </select>
     </div>
+    {#- Le planning s'ouvre sur l'année choisie ici, et non sur la plus
+        récente : le sélecteur commande les deux pages. -#}
+    <a class="btn" href="{{ url_for('planning.view_planning', year=selected_year_id) }}">📅 Planning</a>
     <noscript><button class="btn" type="submit">Afficher</button></noscript>
   </form>
 

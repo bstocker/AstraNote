@@ -75,7 +75,8 @@ finales restent saisies à la main par l'enseignant.
 
 ### Planning et disponibilités
 
-- **Planning de l'année** (menu **📅 Planning**) : l'année entière en synthèse, une
+- **Planning de l'année** (tableau de bord, bouton **📅 Planning** à droite du
+  sélecteur d'année) : l'année entière en synthèse, une
   ligne par semaine du lundi au vendredi, chaque journée en deux demi-journées.
 - **Cocher une demi-journée** la réserve pour les cours : elle passe en
   « Non disponible ». Enregistrement immédiat, compteurs par semaine et par année.
