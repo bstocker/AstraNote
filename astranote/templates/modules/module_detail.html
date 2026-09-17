@@ -134,10 +134,6 @@
             title="N'afficher dans la zone de notation que les séances sélectionnées">👁 Afficher la sélection</button>
     <button type="button" class="btn secondary small" id="showAllDates" hidden
             title="Revenir à l'affichage de toutes les séances">Afficher toutes les séances</button>
-    <button type="button" class="btn secondary small" data-jump="__start__" title="Revenir à la première séance">⇤ Début</button>
-    {% if latest_date %}
-    <button type="button" class="btn small" data-jump="date-{{ latest_date.id }}" title="Aller à la séance la plus récente">Dernière séance ⇥</button>
-    {% endif %}
   </div>
   {#- Quand un filtre est actif, la grille ne montre plus tout : le dire, sinon
       une séance manquante passe pour une séance perdue. -#}

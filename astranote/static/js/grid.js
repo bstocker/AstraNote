@@ -388,10 +388,6 @@
   // offsetLeft se rapporterait alors au document entier.
   function focusTarget(id) {
     if (!wrap) return;
-    if (id === "__start__") {
-      wrap.scrollTo({ left: 0, behavior: "smooth" });
-      return;
-    }
     const el = document.getElementById(id);
     if (!el) return;
     // Cible masquée (séance écartée par le filtre) : ses rectangles sont vides

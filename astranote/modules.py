@@ -367,12 +367,12 @@ def view_module(module_id):
             key=lambda s: s.full_name.lower(),
         )
 
-    # Deux ordres, pour deux usages : le bandeau de saut suit la chronologie
+    # Deux ordres, pour deux usages : le bandeau des séances suit la chronologie
     # de la grille, le menu d'ajout de colonne ouvre sur la séance du jour.
     dates_asc = module_dates_sorted(module)
     dates_desc = module_dates_sorted(module, recent_first=True)
     # Séance la plus récente *datée* : c'est elle que le bandeau étoile et que
-    # vise le raccourci « Dernière séance ».
+    # la grille met en avant.
     latest_date = next((gd for gd in dates_desc if gd.date), None)
 
     return render_template(

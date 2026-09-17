@@ -33,8 +33,8 @@ finales restent saisies à la main par l'enseignant.
   restent visibles pendant le défilement vertical.
 - **Colonne « Étudiant » / « Groupe » figée** : les séances défilent
   horizontalement sous elle, ce qui écarte les séances anciennes sans jamais
-  perdre de vue qui est noté. Barre de défilement dédiée et raccourcis
-  « Aller à la séance », dont la **séance la plus récente**.
+  perdre de vue qui est noté. Barre de défilement dédiée, et un raccourci **⇥**
+  par séance pour sauter directement à elle ; la plus récente porte une ★.
 - **Sélection de séances** : le bandeau liste *toutes* les séances du module ;
   on clique celles qui intéressent (elles passent en surbrillance), puis
   **« Afficher la sélection »** ne laisse qu'elles dans la zone de notation.

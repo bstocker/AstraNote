@@ -1378,9 +1378,13 @@ def test_grid_exposes_anchors_and_navigation(app, admin):
     assert f'id="date-{did}"' in html
     assert f'id="col-star-{sc}"' in html
     assert f'id="subject-student-{ids["Alice"]}"' in html
-    # Raccourcis de défilement et zone de défilement dédiée.
-    assert 'data-jump="__start__"' in html and f'data-jump="date-{did}"' in html
+    # Saut vers une séance, depuis sa pastille, et zone de défilement dédiée.
+    assert f'data-jump="date-{did}"' in html
     assert 'id="gridWrap"' in html
+    # Le bandeau ne porte plus de saut « début » ni « dernière séance » : la
+    # sélection de séances rend le défilement de bout en bout inutile.
+    assert "__start__" not in html
+    assert "Dernière séance" not in html
 
 
 def test_creation_panels_are_folded_by_default(app, admin):
