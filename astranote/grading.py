@@ -8,18 +8,32 @@ from .models import (
 )
 
 # Statuts spéciaux valant 0 étoile (R2) et leur couleur d'affichage.
+# « ABS », « Pas de PC » et « - » ne sont plus proposés dans une colonne
+# d'étoiles (l'assiduité se saisit désormais dans une colonne « Présence ») :
+# ils restent connus ici pour afficher et compter les cellules déjà saisies.
 SPECIAL_STATUSES = {
+    "?": "grey",
+    "Non réalisé": "orange",
+    "Retard": "orange",
     "ABS": "red",
     "Pas de PC": "red",
-    "Retard": "orange",
-    "Non réalisé": "orange",
     "-": "grey",
-    "?": "grey",
 }
+STAR_STATUSES = ["?", "Non réalisé", "Retard"]
 
 # Jetons sélectionnables dans une cellule : 0..4 étoiles + statuts spéciaux.
 STAR_TOKENS = ["0", "1", "2", "3", "4"]
-ALL_TOKENS = STAR_TOKENS + list(SPECIAL_STATUSES.keys())
+ALL_TOKENS = STAR_TOKENS + STAR_STATUSES
+
+# Colonne « Présence » : valeurs proposées et couleur de la cellule. Sans
+# incidence sur les étoiles ni sur la note /20. Une cellule vide = non
+# renseignée (aucune ligne en base).
+PRESENCE_STATUSES = {
+    "Présent": None,
+    "Absent": "red",
+    "Retard": "orange",
+    "Pas de PC": "orange",
+}
 
 
 def token_points(value):
@@ -47,6 +61,15 @@ def display_token(value):
 
 def status_color(value):
     return SPECIAL_STATUSES.get(str(value).strip() if value is not None else "", None)
+
+
+def star_label(value):
+    """Libellé d'un jeton dans la synthèse de séance : « 0 », « ★★ », statut."""
+    value = str(value).strip() if value is not None else "0"
+    if value in SPECIAL_STATUSES:
+        return value
+    pts = token_points(value)
+    return "★" * pts if pts else "0"
 
 
 def round_half(x):

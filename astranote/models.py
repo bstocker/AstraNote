@@ -136,6 +136,10 @@ class GradeDate(db.Model):
         "TextColumn", backref="grade_date", cascade="all, delete-orphan",
         order_by="TextColumn.position",
     )
+    presence_columns = db.relationship(
+        "PresenceColumn", backref="grade_date", cascade="all, delete-orphan",
+        order_by="PresenceColumn.position",
+    )
 
 
 class StarColumn(db.Model):
@@ -172,6 +176,23 @@ class TextColumn(db.Model):
     position = db.Column(db.Integer, default=0)
 
     values = db.relationship("TextValue", backref="text_column", cascade="all, delete-orphan")
+
+
+class PresenceColumn(db.Model):
+    """Colonne « Présence » rattachée à une séance.
+
+    Chaque cellule prend une valeur de `grading.PRESENCE_STATUSES` (Présent,
+    Absent, Retard, Pas de PC). Sans incidence sur les étoiles ni sur la note
+    /20 ; alimente la synthèse de séance.
+    """
+    __tablename__ = "presence_column"
+    id = db.Column(db.Integer, primary_key=True)
+    grade_date_id = db.Column(db.Integer, db.ForeignKey("grade_date.id"), nullable=False)
+    title = db.Column(db.String(120))
+    position = db.Column(db.Integer, default=0)
+
+    values = db.relationship("PresenceValue", backref="presence_column",
+                             cascade="all, delete-orphan")
 
 
 class NoteColumn(db.Model):
@@ -271,6 +292,21 @@ class TextValue(db.Model):
     __table_args__ = (
         db.UniqueConstraint("subject_type", "subject_id", "text_column_id",
                             name="uq_text_subject_col"),
+    )
+
+
+class PresenceValue(db.Model):
+    __tablename__ = "presence_value"
+    id = db.Column(db.Integer, primary_key=True)
+    subject_type = db.Column(db.String(10), nullable=False)
+    subject_id = db.Column(db.Integer, nullable=False)
+    presence_column_id = db.Column(db.Integer, db.ForeignKey("presence_column.id"),
+                                   nullable=False)
+    status = db.Column(db.String(20), nullable=False)  # cf. PRESENCE_STATUSES
+
+    __table_args__ = (
+        db.UniqueConstraint("subject_type", "subject_id", "presence_column_id",
+                            name="uq_presence_subject_col"),
     )
 
 

@@ -15,8 +15,8 @@ from flask_login import login_required, current_user
 
 from .models import (
     db, Class, Module, GradeDate, StarColumn, UrlColumn, TextColumn,
-    NoteColumn, Student, Enrollment, Group, GroupMember,
-    Star, UrlValue, TextValue, NoteValue,
+    PresenceColumn, NoteColumn, Student, Enrollment, Group, GroupMember,
+    Star, UrlValue, TextValue, PresenceValue, NoteValue,
     SubjectColor, SUBJECT_COLORS,
     SUBJECT_STUDENT, SUBJECT_GROUP, WORK_MODE_INDIVIDUAL, WORK_MODE_GROUP,
 )
@@ -326,12 +326,14 @@ def view_module(module_id):
     # sur les colonnes du module suffit à borner la requête, plus besoin de
     # filtrer sur le type.
     star_map, url_map, text_map, note_map = {}, {}, {}, {}
+    presence_map = {}
 
-    star_col_ids, url_col_ids, text_col_ids = [], [], []
+    star_col_ids, url_col_ids, text_col_ids, presence_col_ids = [], [], [], []
     for gd in module.grade_dates:
         star_col_ids += [c.id for c in gd.star_columns]
         url_col_ids += [c.id for c in gd.url_columns]
         text_col_ids += [c.id for c in gd.text_columns]
+        presence_col_ids += [c.id for c in gd.presence_columns]
     note_col_ids = [c.id for c in module.note_columns]
 
     if star_col_ids:
@@ -344,6 +346,10 @@ def view_module(module_id):
         for t in TextValue.query.filter(
                 TextValue.text_column_id.in_(text_col_ids)).all():
             text_map[(t.subject_type, t.subject_id, t.text_column_id)] = t.content
+    if presence_col_ids:
+        for p in PresenceValue.query.filter(
+                PresenceValue.presence_column_id.in_(presence_col_ids)).all():
+            presence_map[(p.subject_type, p.subject_id, p.presence_column_id)] = p.status
     if note_col_ids:
         for n in NoteValue.query.filter(
                 NoteValue.note_column_id.in_(note_col_ids)).all():
@@ -380,6 +386,7 @@ def view_module(module_id):
         module=module, subjects=subjects, grades=grades,
         members=members, member_totals=member_totals,
         star_map=star_map, url_map=url_map, text_map=text_map, note_map=note_map,
+        presence_map=presence_map, presence_statuses=grading.PRESENCE_STATUSES,
         color_map=color_map, subject_colors=SUBJECT_COLORS,
         color_labels=SUBJECT_COLOR_LABELS,
         all_tokens=grading.ALL_TOKENS, special_statuses=grading.SPECIAL_STATUSES,
@@ -430,6 +437,201 @@ def module_ranking(module_id):
         sessions=sessions,
         ranked_count=sum(1 for t in overall.values() if t > 0),
         subject_count=len(subjects),
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Synthèse de séance (Excel) : effectifs par élément des listes
+# --------------------------------------------------------------------------- #
+PRESENCE_UNSET = "Non renseigné"
+
+
+def synthesis_dates(module, raw_ids):
+    """Séances retenues pour la synthèse, dans l'ordre chronologique.
+
+    Les identifiants étrangers au module sont ignorés. Sans sélection valable,
+    on retient la séance datée la plus récente (à défaut, la dernière créée).
+    """
+    wanted = set()
+    for raw in raw_ids:
+        try:
+            wanted.add(int(raw))
+        except (TypeError, ValueError):
+            continue
+    ordered = module_dates_sorted(module)
+    chosen = [gd for gd in ordered if gd.id in wanted]
+    if chosen:
+        return chosen
+    latest = next((gd for gd in module_dates_sorted(module, recent_first=True)
+                   if gd.date), None)
+    if latest is None and ordered:
+        latest = ordered[-1]
+    return [latest] if latest else []
+
+
+def synthesis_counts(module, grade_dates):
+    """Effectifs par élément de liste, colonne par colonne.
+
+    La présence est comptée par étudiant : les étudiants actifs inscrits en
+    mode individuel, les membres actifs des groupes en mode groupe. Les
+    étoiles sont comptées sur l'unité notée du module (étudiants ou groupes).
+    Une cellule d'étoiles jamais saisie vaut « 0 », comme dans la grille ; une
+    cellule de présence vide est « Non renseigné ».
+
+    Retourne {"students": n, "units": n, "unit_label": str, "dates": [
+      {"date": GradeDate,
+       "presence": [(colonne, {statut: n})], "stars": [(colonne, {jeton: n})]}]}.
+    """
+    if module.is_group_mode:
+        student_ids = {m["id"] for rows in module_members(module).values()
+                       for m in rows if m["active"]}
+        unit_ids = {s["id"] for s in module_subjects(module)}
+        unit_label = "groupes"
+    else:
+        student_ids = {s["id"] for s in module_subjects(module) if s["active"]}
+        unit_ids = student_ids
+        unit_label = "étudiants"
+    stype = _subject_type(module)
+
+    presence_cols = [c for gd in grade_dates for c in gd.presence_columns]
+    star_cols = [c for gd in grade_dates for c in gd.star_columns]
+
+    presence_vals = {}
+    if presence_cols:
+        for pv in PresenceValue.query.filter(
+                PresenceValue.subject_type == SUBJECT_STUDENT,
+                PresenceValue.presence_column_id.in_([c.id for c in presence_cols])):
+            if pv.subject_id in student_ids:
+                presence_vals[(pv.presence_column_id, pv.subject_id)] = pv.status
+    star_vals = {}
+    if star_cols:
+        for st in Star.query.filter(
+                Star.subject_type == stype,
+                Star.star_column_id.in_([c.id for c in star_cols])):
+            if st.subject_id in unit_ids:
+                star_vals[(st.star_column_id, st.subject_id)] = st.value
+
+    dates = []
+    for gd in grade_dates:
+        presence = []
+        for col in gd.presence_columns:
+            counts = dict.fromkeys(list(grading.PRESENCE_STATUSES) + [PRESENCE_UNSET], 0)
+            for sid in student_ids:
+                status = presence_vals.get((col.id, sid))
+                counts[status if status in counts else PRESENCE_UNSET] += 1
+            presence.append((col, counts))
+        stars = []
+        for col in gd.star_columns:
+            counts = dict.fromkeys(grading.ALL_TOKENS, 0)
+            for sid in unit_ids:
+                value = str(star_vals.get((col.id, sid), "0")).strip()
+                if value not in grading.SPECIAL_STATUSES:
+                    value = str(grading.token_points(value))
+                counts[value] = counts.get(value, 0) + 1
+            stars.append((col, counts))
+        dates.append({"date": gd, "presence": presence, "stars": stars})
+    return {"students": len(student_ids), "units": len(unit_ids),
+            "unit_label": unit_label, "dates": dates}
+
+
+@modules_bp.route("/modules/<int:module_id>/synthesis.xlsx")
+@login_required
+def export_synthesis(module_id):
+    """Synthèse Excel d'une ou plusieurs séances (la plus récente par défaut) :
+    pour chaque colonne « Présence » et « Étoiles », le nombre d'étudiants
+    (ou de groupes) concernés par chaque élément de la liste."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    module = get_module_or_403(module_id)
+    grade_dates = synthesis_dates(module, request.args.getlist("dates"))
+    if not grade_dates:
+        flash("Aucune séance à synthétiser : ajoutez d'abord une date.", "error")
+        return _module_redirect(module)
+    data = synthesis_counts(module, grade_dates)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Synthèse"
+
+    bold = Font(bold=True)
+    head_fill = PatternFill("solid", fgColor="F1F5F9")
+    fills = {
+        "red": PatternFill("solid", fgColor="FEE2E2"),
+        "orange": PatternFill("solid", fgColor="FFEDD5"),
+        "grey": PatternFill("solid", fgColor="F1F5F9"),
+    }
+    center = Alignment(horizontal="center")
+
+    ws["A1"] = f"Synthèse — {module.name}"
+    ws["A1"].font = Font(bold=True, size=13)
+    ws["A2"] = f"{module.klass.name} · {module.klass.school.name} · {module.klass.academic_year.label}"
+    effectif = f"Effectif : {data['students']} étudiant(s)"
+    if module.is_group_mode:
+        effectif += f", {data['units']} groupe(s)"
+    ws["A3"] = effectif
+    row = 5
+
+    def table(title, columns, labels, colors):
+        """Un tableau : éléments de la liste en lignes, colonnes en colonnes."""
+        nonlocal row
+        ws.cell(row=row, column=1, value=title).font = bold
+        ws.cell(row=row, column=1).fill = head_fill
+        for j, (col, _) in enumerate(columns, start=2):
+            c = ws.cell(row=row, column=j, value=col.title)
+            c.font, c.fill, c.alignment = bold, head_fill, center
+        row += 1
+        for key, label in labels:
+            first = ws.cell(row=row, column=1, value=label)
+            fill = fills.get(colors.get(key))
+            if fill:
+                first.fill = fill
+            for j, (_, counts) in enumerate(columns, start=2):
+                ws.cell(row=row, column=j, value=counts.get(key, 0)).alignment = center
+            row += 1
+        row += 1
+
+    for block in data["dates"]:
+        gd = block["date"]
+        title = ("Séance du " + gd.date.strftime("%d/%m/%Y")) if gd.date else "Séance sans date"
+        if gd.label:
+            title += f" · {gd.label}"
+        ws.cell(row=row, column=1, value=title).font = Font(bold=True, size=12)
+        row += 1
+        if block["presence"]:
+            table("Présence (nombre d'étudiants)", block["presence"],
+                  [(k, k) for k in list(grading.PRESENCE_STATUSES) + [PRESENCE_UNSET]],
+                  grading.PRESENCE_STATUSES)
+        if block["stars"]:
+            # Les statuts retirés de la liste (ABS…) n'apparaissent que s'ils
+            # figurent encore dans une cellule saisie auparavant.
+            legacy = [k for k in grading.SPECIAL_STATUSES
+                      if k not in grading.ALL_TOKENS
+                      and any(counts.get(k) for _, counts in block["stars"])]
+            table(f"Étoiles (nombre d'{data['unit_label']})", block["stars"],
+                  [(k, grading.star_label(k)) for k in grading.ALL_TOKENS + legacy],
+                  grading.SPECIAL_STATUSES)
+        if not block["presence"] and not block["stars"]:
+            ws.cell(row=row, column=1,
+                    value="Aucune colonne « Présence » ni « Étoiles » pour cette séance.")
+            row += 2
+
+    ws.column_dimensions["A"].width = 34
+    max_cols = max((len(b["presence"]) for b in data["dates"]), default=0)
+    max_cols = max(max_cols, max((len(b["stars"]) for b in data["dates"]), default=0))
+    for j in range(2, 2 + max_cols):
+        ws.column_dimensions[ws.cell(row=1, column=j).column_letter].width = 16
+
+    bio = BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+    filename = re.sub(r"[^\w\-]+", "_", module.name).strip("_") or "module"
+    last = grade_dates[-1]
+    if len(grade_dates) == 1 and last.date:
+        filename += "_" + last.date.strftime("%Y-%m-%d")
+    return send_file(
+        bio, as_attachment=True, download_name=f"synthese_{filename}.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
 
@@ -537,6 +739,27 @@ def add_text_column(date_id):
     return _module_redirect(module, f"col-text-{col.id}")
 
 
+@modules_bp.route("/dates/<int:date_id>/presence-columns", methods=["POST"])
+@login_required
+def add_presence_column(date_id):
+    """Colonne « Présence » (Présent / Absent / Retard / Pas de PC).
+
+    Sans incidence sur les étoiles ni sur la note /20 : elle sert au suivi de
+    l'assiduité et alimente la synthèse de séance.
+    """
+    gd = db.session.get(GradeDate, date_id) or abort(404)
+    module = get_module_or_403(gd.module_id)
+    col = PresenceColumn(
+        grade_date_id=gd.id,
+        title=request.form.get("title", "").strip() or "Présence",
+        position=_next_position(gd.presence_columns),
+    )
+    db.session.add(col)
+    db.session.commit()
+    flash("Colonne de présence ajoutée.", "success")
+    return _module_redirect(module, f"col-presence-{col.id}")
+
+
 @modules_bp.route("/star-columns/<int:col_id>/delete", methods=["POST"])
 @login_required
 def delete_star_column(col_id):
@@ -565,6 +788,17 @@ def delete_text_column(col_id):
     col = db.session.get(TextColumn, col_id) or abort(404)
     module = get_module_or_403(col.grade_date.module_id)
     db.session.delete(col)   # cascade : les TextValue de la colonne partent avec
+    db.session.commit()
+    flash("Colonne supprimée.", "success")
+    return _module_redirect(module)
+
+
+@modules_bp.route("/presence-columns/<int:col_id>/delete", methods=["POST"])
+@login_required
+def delete_presence_column(col_id):
+    col = db.session.get(PresenceColumn, col_id) or abort(404)
+    module = get_module_or_403(col.grade_date.module_id)
+    db.session.delete(col)   # cascade : les PresenceValue de la colonne partent avec
     db.session.commit()
     flash("Colonne supprimée.", "success")
     return _module_redirect(module)
@@ -682,6 +916,29 @@ def move_text_column(col_id):
     _reorder(col, col.grade_date.text_columns, request.form.get("dir", "up"))
     db.session.commit()
     return _module_redirect(module, f"col-text-{col.id}")
+
+
+@modules_bp.route("/presence-columns/<int:col_id>/rename", methods=["POST"])
+@login_required
+def rename_presence_column(col_id):
+    col = db.session.get(PresenceColumn, col_id) or abort(404)
+    module = get_module_or_403(col.grade_date.module_id)
+    title = request.form.get("title", "").strip()
+    if title:
+        col.title = title
+        db.session.commit()
+        flash("Colonne renommée.", "success")
+    return _module_redirect(module, f"col-presence-{col.id}")
+
+
+@modules_bp.route("/presence-columns/<int:col_id>/move", methods=["POST"])
+@login_required
+def move_presence_column(col_id):
+    col = db.session.get(PresenceColumn, col_id) or abort(404)
+    module = get_module_or_403(col.grade_date.module_id)
+    _reorder(col, col.grade_date.presence_columns, request.form.get("dir", "up"))
+    db.session.commit()
+    return _module_redirect(module, f"col-presence-{col.id}")
 
 
 @modules_bp.route("/note-columns/<int:col_id>/rename", methods=["POST"])
@@ -1019,6 +1276,49 @@ def save_text(module_id):
         ))
     db.session.commit()
     return jsonify(ok=True, value=content or "")
+
+
+@modules_bp.route("/modules/<int:module_id>/save-presence", methods=["POST"])
+@login_required
+def save_presence(module_id):
+    """Statut d'une cellule de colonne « Présence ».
+
+    La présence est celle d'un étudiant : une ligne de groupe n'en porte pas.
+    Une valeur vide supprime la ligne (cellule « non renseignée »).
+    """
+    module = get_module_or_403(module_id)
+    data = request.get_json(silent=True) or {}
+    column_id = data.get("column_id")
+    status = str(data.get("value", "")).strip()
+
+    if status and status not in grading.PRESENCE_STATUSES:
+        return jsonify(error="Valeur invalide"), 400
+    col = db.session.get(PresenceColumn, column_id)
+    if not col or col.grade_date.module_id != module.id:
+        return jsonify(error="Colonne invalide"), 400
+    subject, err = _payload_subject(module, data)
+    if err:
+        return err
+    stype, subject_id = subject
+    if stype != SUBJECT_STUDENT:
+        return jsonify(error="La présence se saisit par étudiant"), 400
+
+    pv = PresenceValue.query.filter_by(
+        subject_type=stype, subject_id=subject_id, presence_column_id=column_id,
+    ).first()
+    if not status:
+        if pv:
+            db.session.delete(pv)
+    elif pv:
+        pv.status = status
+    else:
+        db.session.add(PresenceValue(
+            subject_type=stype, subject_id=subject_id,
+            presence_column_id=column_id, status=status,
+        ))
+    db.session.commit()
+    return jsonify(ok=True, value=status,
+                   color=grading.PRESENCE_STATUSES.get(status))
 
 
 @modules_bp.route("/modules/<int:module_id>/save-comment", methods=["POST"])

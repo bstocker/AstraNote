@@ -46,7 +46,11 @@ finales restent saisies à la main par l'enseignant.
   page revient **sur la nouvelle entrée** plutôt qu'en haut de la grille.
 - Saisie immédiate (AJAX) avec **recalcul du prorata en direct** et raccourcis
   clavier (0–4 pour la valeur, Entrée pour descendre d'une ligne).
-- Statuts spéciaux (ABS, Retard, Pas de PC…) affichés en couleur, valant 0 étoile.
+- Statuts spéciaux (?, Non réalisé, Retard) affichés en couleur, valant 0 étoile.
+- Colonnes **Présence** (Présent, Absent, Retard, Pas de PC) : Absent en rouge,
+  Retard et Pas de PC en orange.
+- Bouton **Synthèse** : export Excel du nombre d'étudiants par élément des
+  colonnes Présence et Étoiles, pour la dernière séance ou une sélection.
 - Calcul automatique de la **note /20 au prorata** (règles R1–R12).
 - **Couleur de fond** libre sur la cellule d'un étudiant ou d'un groupe, propre à
   chaque module.

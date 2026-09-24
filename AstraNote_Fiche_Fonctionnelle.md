@@ -35,7 +35,8 @@ Démarrage **à neuf** : pas de reprise des fichiers Excel existants.
 | **Date / Séance** | Repère temporel dans un module (ex. 2025-09-30). Un module comporte **plusieurs dates**. |
 | **Colonne d'étoiles** | Colonne d'exercice rattachée à une date, où l'on saisit les étoiles. On peut **en ajouter à tout moment**. |
 | **Étoile** | Unité de points de suivi continu (`*` = 1 point). Une cellule vaut de 0 à 4 étoiles. |
-| **Statut spécial** | Marqueur non-noté valant **0 étoile** : `Retard`, `ABS`, `-`, `?`, `Pas de PC`, `Non réalisé`. |
+| **Statut spécial** | Marqueur non-noté valant **0 étoile** : `?`, `Non réalisé`, `Retard`. |
+| **Colonne de présence** | Colonne rattachée à une date où l'on saisit l'assiduité de chaque étudiant : `Présent`, `Absent`, `Retard`, `Pas de PC`. Sans effet sur les étoiles ni sur la note. |
 | **Note d'étoiles** | Note /20 calculée automatiquement au prorata du meilleur total d'étoiles du module. |
 | **Colonne de note** | Note chiffrée /20 **saisie manuellement** par l'enseignant (ex. « Note CC », « Note Examen »). Une classe/un module peut en avoir **plusieurs**. Affichée **fond jaune, police en gras**. |
 | **Colonne URL** | Colonne rattachée à une date contenant un **lien** par étudiant/groupe (ex. dépôt GitHub, rapport board.net, URL lab). Cliquable, non notée. |
@@ -65,15 +66,15 @@ Structure d'une grille de module : **une date, puis une ou plusieurs colonnes d'
 
 **R1 — Comptage des étoiles.** Pour un module, le total d'un étudiant = somme des étoiles de **toutes ses colonnes d'étoiles** (`*`=1, `**`=2, `***`=3, `****`=4), toutes dates confondues.
 
-**R2 — Statuts spéciaux.** `Retard`, `ABS`, `-`, `?`, `Pas de PC`, `Non réalisé` comptent pour **0 étoile**. Ils sont **affichés en couleur** pour repérage visuel :
+**R2 — Statuts spéciaux.** Une cellule d'étoiles propose la liste `0`, `*`, `**`, `***`, `****`, `?`, `Non réalisé`, `Retard`. Les statuts comptent pour **0 étoile** et sont **affichés en couleur** pour repérage visuel :
 
 | Statut | Couleur |
 |---|---|
-| `ABS` | **Rouge** |
-| `Pas de PC` | **Rouge** |
 | `Retard` | **Orange** |
 | `Non réalisé` | **Orange** |
-| Autres (`-`, `?`) | Gris/neutre |
+| `?` | Gris/neutre |
+
+`ABS`, `Pas de PC` et `-` ne sont plus proposés (l'assiduité se saisit dans une **colonne de présence**) ; les cellules saisies auparavant avec ces valeurs restent affichées et valent toujours 0 étoile.
 
 Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment** : l'enseignant peut changer le statut d'une cellule quand il le souhaite, avec recalcul automatique.
 
@@ -169,7 +170,9 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
   - **Colonnes URL** possibles sous une date (liens cliquables) ;
   - **Colonnes de fin** : total d'étoiles, **note d'étoiles /20** (auto), colonnes de notes manuelles (Note CC, Note Examen… — **fond jaune, gras**), et commentaire général.
 - Saisie rapide des étoiles (0 à 4) au clic/clavier directement dans la cellule.
-- Sélection des statuts spéciaux (`ABS`, `Retard`, etc.), affichés en couleur.
+- Sélection des statuts spéciaux (`?`, `Non réalisé`, `Retard`), affichés en couleur.
+- **Colonnes de présence** sous une date : `Présent`, `Absent`, `Retard`, `Pas de PC`. La cellule passe en **rouge** pour `Absent`, en **orange** pour `Retard` ou `Pas de PC`. En mode groupe, la présence se saisit sur les **membres**, pas sur la ligne du groupe.
+- **Synthèse de séance** : un bouton **« Synthèse »**, à droite de « Classement », télécharge un fichier `.xlsx` pour la séance la plus récente (cochée par défaut) ou pour plusieurs séances au choix. Pour chaque colonne de présence et d'étoiles, il indique le **nombre d'étudiants** concernés par chaque élément de la liste (en mode groupe, les étoiles sont comptées par groupe). Une cellule d'étoiles vide compte pour `0`, une cellule de présence vide pour « Non renseigné ».
 - Enregistrement immédiat ; totaux et note d'étoiles **mis à jour en direct**.
 - Les **étudiants neutralisés** sont regroupés **en bas** du tableau, grisés, et leurs cellules sont **en lecture seule** (aucune saisie possible).
 - La cellule **Étudiant** (ou **Groupe**) peut recevoir une **couleur de fond** au choix — **vert**, **jaune**, **rouge** ou **gris** — via une petite palette dans la cellule ; la signification est libre (repérage visuel de l'enseignant). La couleur est **propre au module** : un même étudiant peut être vert dans un module et rouge dans un autre. Elle n'a **aucun effet sur les calculs**.

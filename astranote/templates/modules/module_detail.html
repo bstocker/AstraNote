@@ -34,6 +34,26 @@
   </div>
   <div style="display:flex; gap:8px; align-items:flex-start;">
   <a class="btn gold small" href="{{ url_for('modules.module_ranking', module_id=module.id) }}">🏆 Classement</a>
+  {#- Synthèse Excel des colonnes « Présence » et « Étoiles » : la séance la
+      plus récente est cochée d'office, on peut en ajouter d'autres. -#}
+  {% if module.grade_dates %}
+  <details class="synth-menu">
+    <summary class="btn secondary small">📊 Synthèse</summary>
+    <form class="synth-panel" method="get" action="{{ url_for('modules.export_synthesis', module_id=module.id) }}">
+      <p class="help" style="margin:0 0 6px;">Nombre d'étudiants par élément des colonnes Présence et Étoiles.</p>
+      <div class="synth-dates">
+        {% for gd in dates_desc %}
+        <label>
+          <input type="checkbox" name="dates" value="{{ gd.id }}"
+                 {{ 'checked' if (latest_date and gd.id == latest_date.id) or (not latest_date and loop.first) }}>
+          {{ gd.date.strftime('%d/%m/%Y') if gd.date else 'Sans date' }}{% if gd.label %} · {{ gd.label }}{% endif %}
+        </label>
+        {% endfor %}
+      </div>
+      <button class="btn small" type="submit">⬇ Télécharger (.xlsx)</button>
+    </form>
+  </details>
+  {% endif %}
   <form method="post" action="{{ url_for('modules.delete_module', module_id=module.id) }}"
         onsubmit="return confirm('Supprimer ce module ?');">
 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -161,13 +181,14 @@
          data-save-note="{{ url_for('modules.save_note', module_id=module.id) }}"
          data-save-url="{{ url_for('modules.save_url', module_id=module.id) }}"
          data-save-text="{{ url_for('modules.save_text', module_id=module.id) }}"
+         data-save-presence="{{ url_for('modules.save_presence', module_id=module.id) }}"
          data-save-comment="{{ url_for('modules.save_comment', module_id=module.id) }}"
          data-save-color="{{ url_for('modules.save_color', module_id=module.id) }}">
     <thead>
       <tr>
         <th class="subject" rowspan="2">{{ 'Groupe / Étudiant' if module.is_group_mode else 'Étudiant' }}</th>
         {% for gd in module.grade_dates %}
-          {% set span = gd.star_columns|length + gd.url_columns|length + gd.text_columns|length %}
+          {% set span = gd.star_columns|length + gd.url_columns|length + gd.text_columns|length + gd.presence_columns|length %}
           {#- data-date : seul lien entre une colonne et sa séance, dont se sert
               le filtrage « afficher la sélection » pour masquer les colonnes. -#}
           <th class="date-head{{ ' latest' if latest_date and gd.id == latest_date.id else '' }}"
@@ -197,6 +218,15 @@
       </tr>
       <tr>
         {% for gd in module.grade_dates %}
+          {% for pc in gd.presence_columns %}
+            <th class="presence-head" id="col-presence-{{ pc.id }}" data-date="{{ gd.id }}">{{ pc.title }} ✋
+              <form method="post" action="{{ url_for('modules.delete_presence_column', col_id=pc.id) }}" style="display:inline;"
+                    onsubmit="return confirm('Supprimer cette colonne de présence ?');">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn danger small" type="submit">✕</button>
+              </form>
+            </th>
+          {% endfor %}
           {% for sc in gd.star_columns %}
             <th id="col-star-{{ sc.id }}" data-date="{{ gd.id }}">{{ sc.title }}
               <form method="post" action="{{ url_for('modules.delete_star_column', col_id=sc.id) }}" style="display:inline;"
@@ -224,7 +254,7 @@
               </form>
             </th>
           {% endfor %}
-          {% if gd.star_columns|length + gd.url_columns|length + gd.text_columns|length == 0 %}
+          {% if gd.star_columns|length + gd.url_columns|length + gd.text_columns|length + gd.presence_columns|length == 0 %}
             <th class="muted" data-date="{{ gd.id }}" style="font-weight:400;">—</th>
           {% endif %}
         {% endfor %}
@@ -271,6 +301,26 @@
           {% endif %}
         </td>
         {% for gd in module.grade_dates %}
+          {#- La présence est celle d'un étudiant : une ligne de groupe n'en a pas. -#}
+          {% for pc in gd.presence_columns %}
+            {% if subj.type == 'group' %}
+            <td class="presence-cell na" data-date="{{ gd.id }}"
+                title="La présence se saisit sur les membres du groupe"></td>
+            {% else %}
+            {% set pval = presence_map.get((subj.type, subj.id, pc.id), '') %}
+            {% set pcolor = presence_statuses.get(pval) %}
+            <td class="presence-cell {{ 'st-' ~ pcolor if pcolor else '' }}"
+                data-subject="{{ subj.id }}" data-subject-type="{{ subj.type }}"
+                data-date="{{ gd.id }}" data-column="{{ pc.id }}">
+              <select class="presence-select" {{ 'disabled' if not subj.active }}>
+                <option value="">—</option>
+                {% for st in presence_statuses %}
+                  <option value="{{ st }}" {{ 'selected' if pval == st else '' }}>{{ st }}</option>
+                {% endfor %}
+              </select>
+            </td>
+            {% endif %}
+          {% endfor %}
           {% for sc in gd.star_columns %}
             {% set val = star_map.get((subj.type, subj.id, sc.id), '0') %}
             {% set color = special_statuses.get(val) %}
@@ -278,6 +328,11 @@
                 data-subject="{{ subj.id }}" data-subject-type="{{ subj.type }}"
                 data-date="{{ gd.id }}" data-column="{{ sc.id }}">
               <select class="star-select" {{ 'disabled' if not subj.active }}>
+                {#- Statut retiré de la liste (ABS, Pas de PC, -) mais encore
+                    présent dans une cellule saisie auparavant : on l'affiche. -#}
+                {% if val in special_statuses and val not in all_tokens %}
+                  <option value="{{ val }}" selected>{{ val }}</option>
+                {% endif %}
                 {% for tok in all_tokens %}
                   <option value="{{ tok }}" {{ 'selected' if val == tok else '' }}>
                     {%- if tok in special_statuses -%}{{ tok }}
@@ -305,7 +360,7 @@
               <textarea class="text-input" placeholder="Remarque…" {{ 'disabled' if not subj.active }}>{{ tval or '' }}</textarea>
             </td>
           {% endfor %}
-          {% if gd.star_columns|length + gd.url_columns|length + gd.text_columns|length == 0 %}<td data-date="{{ gd.id }}"></td>{% endif %}
+          {% if gd.star_columns|length + gd.url_columns|length + gd.text_columns|length + gd.presence_columns|length == 0 %}<td data-date="{{ gd.id }}"></td>{% endif %}
         {% endfor %}
         <td class="total" data-total-key="{{ subj.type }}:{{ subj.id }}">{{ total }}</td>
         <td class="note20 {{ 'ref' if is_ref else '' }}" data-note20-key="{{ subj.type }}:{{ subj.id }}"
@@ -346,7 +401,7 @@
     </tbody>
   </table>
 </div>
-<p class="help">Cliquez sur une cellule pour saisir 0–4 étoiles ou un statut (ABS, Retard…). La note /20 se recalcule automatiquement (référence = 20/20, prorata arrondi au 0,5).</p>
+<p class="help">Cliquez sur une cellule pour saisir 0–4 étoiles ou un statut (?, Non réalisé, Retard). La note /20 se recalcule automatiquement (référence = 20/20, prorata arrondi au 0,5).</p>
 {% if hidden_inactive %}
 {#- Dire qu'ils existent, sinon l'enseignant les croit perdus. -#}
 <p class="help">🚫 {{ hidden_inactive }} étudiant(s) neutralisé(s) ne sont pas affichés dans cette grille ;
@@ -378,7 +433,8 @@
     <form method="post" id="addColForm" class="inline-form"
           data-star-action="{{ url_for('modules.add_star_column', date_id=0) }}"
           data-url-action="{{ url_for('modules.add_url_column', date_id=0) }}"
-          data-text-action="{{ url_for('modules.add_text_column', date_id=0) }}">
+          data-text-action="{{ url_for('modules.add_text_column', date_id=0) }}"
+          data-presence-action="{{ url_for('modules.add_presence_column', date_id=0) }}">
 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div><label>Date</label>
         {#- La plus récente en tête : c'est presque toujours celle qu'on vise. -#}
@@ -391,6 +447,7 @@
       <div><label>Type</label>
         <select id="colType">
           <option value="star">Étoiles</option>
+          <option value="presence">Présence</option>
           <option value="url">Lien (URL)</option>
           <option value="text">Commentaire libre</option>
         </select>
@@ -400,7 +457,8 @@
     </form>
     <p class="help">Vous pouvez ajouter une colonne à tout moment, y compris sur une date existante.
       Une colonne <strong>commentaire libre</strong> reçoit du texte propre à cette séance,
-      sans incidence sur les étoiles ni sur la note /20.</p>
+      sans incidence sur les étoiles ni sur la note /20. Une colonne <strong>présence</strong>
+      propose Présent, Absent, Retard ou Pas de PC, sans incidence non plus sur la note.</p>
     {% endif %}
   </div>
 
@@ -459,6 +517,18 @@
         </div>
       </div>
       <ul class="manage-cols">
+        {% for pc in gd.presence_columns %}
+        <li>
+          <span class="tag presence">✋</span>
+          <form method="post" action="{{ url_for('modules.rename_presence_column', col_id=pc.id) }}" class="inline-form" style="display:inline-flex;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="text" name="title" value="{{ pc.title }}">
+            <button class="btn small" type="submit">OK</button>
+          </form>
+          {{ mv(url_for('modules.move_presence_column', col_id=pc.id), pc.id, 'up', 'Gauche') }}
+          {{ mv(url_for('modules.move_presence_column', col_id=pc.id), pc.id, 'down', 'Droite') }}
+        </li>
+        {% endfor %}
         {% for sc in gd.star_columns %}
         <li>
           <span class="tag star">★</span>

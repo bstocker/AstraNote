@@ -10,6 +10,7 @@
     note: grid.dataset.saveNote,
     url: grid.dataset.saveUrl,
     text: grid.dataset.saveText,
+    presence: grid.dataset.savePresence,
     comment: grid.dataset.saveComment,
     color: grid.dataset.saveColor,
   };
@@ -21,6 +22,9 @@
     "Retard": "orange", "Non réalisé": "orange",
     "-": "grey", "?": "grey",
   };
+
+  // Couleurs de la colonne « Présence » (cf. grading.PRESENCE_STATUSES).
+  const PRESENCE_COLORS = { "Absent": "red", "Retard": "orange", "Pas de PC": "orange" };
 
   const CSRF = (document.querySelector('meta[name="csrf-token"]') || {}).content || "";
 
@@ -112,6 +116,34 @@
         const next = all[all.indexOf(sel) + 1];
         if (next) next.focus();
       }
+    });
+  });
+
+  // --- Présence (select) ---
+  grid.querySelectorAll(".presence-select").forEach((sel) => {
+    const cell = sel.closest(".presence-cell");
+    sel.addEventListener("change", async () => {
+      cell.classList.remove("st-red", "st-orange");
+      if (PRESENCE_COLORS[sel.value]) cell.classList.add("st-" + PRESENCE_COLORS[sel.value]);
+      try {
+        await postJSON(urls.presence, {
+          ...subjectOf(cell),
+          column_id: Number(cell.dataset.column),
+          value: sel.value,
+        });
+        flash(cell, true);
+      } catch (e) { flash(cell, false); alert(e.message); }
+    });
+    // Entrée descend d'une ligne, comme dans une colonne d'étoiles : l'appel
+    // se fait d'un trait, du premier au dernier étudiant.
+    sel.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      const all = Array.from(grid.querySelectorAll(
+        `.presence-cell[data-column="${cell.dataset.column}"] .presence-select`))
+        .filter((s) => s.offsetParent !== null);
+      const next = all[all.indexOf(sel) + 1];
+      if (next) next.focus();
     });
   });
 
@@ -466,6 +498,7 @@
       const base = {
         url: addColForm.dataset.urlAction,
         text: addColForm.dataset.textAction,
+        presence: addColForm.dataset.presenceAction,
       }[type] || addColForm.dataset.starAction;
       // Les routes sont générées avec date_id=0 ; on remplace /dates/0/ par la vraie date.
       const action = base.replace("/dates/0/", "/dates/" + dateId + "/");

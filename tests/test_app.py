@@ -9,6 +9,7 @@ from astranote.models import (
     GradeDate, StarColumn, UrlColumn, TextColumn, NoteColumn, Group,
     GroupMember, Star,
     UrlValue, TextValue, NoteValue, SubjectColor, Teacher,
+    PresenceColumn, PresenceValue,
 )
 from conftest import make_teacher, login, ADMIN_PW, TestConfig
 
@@ -1789,3 +1790,198 @@ def test_duration_column_added_to_an_existing_database(tmp_path):
         gd.duration_hours = 2.5
         db.session.commit()
         assert db.session.get(GradeDate, 1).duration_hours == 2.5
+
+
+# --------------------------------------------------------------------------- #
+# Liste des étoiles, colonne « Présence » et synthèse de séance
+# --------------------------------------------------------------------------- #
+def test_star_list_offers_new_statuses_only(app, admin):
+    """Liste proposée : 0, ★…★★★★, ?, Non réalisé, Retard. ABS, Pas de PC et
+    « - » ne sont plus proposés."""
+    assert grading.ALL_TOKENS == ["0", "1", "2", "3", "4", "?", "Non réalisé", "Retard"]
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    did, scid = add_star_column(app, admin, mid)
+    for value in ("?", "Non réalisé", "Retard"):
+        r = admin.post(f"/modules/{mid}/save-star", json={
+            "subject_id": ids["Alice"], "column_id": scid, "value": value})
+        assert r.status_code == 200
+    for value in ("ABS", "Pas de PC", "-"):
+        r = admin.post(f"/modules/{mid}/save-star", json={
+            "subject_id": ids["Alice"], "column_id": scid, "value": value})
+        assert r.status_code == 400
+
+
+def test_legacy_star_status_still_displayed(app, admin):
+    """Une cellule saisie « ABS » avant le changement reste affichée telle quelle."""
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    did, scid = add_star_column(app, admin, mid)
+    with app.app_context():
+        db.session.add(Star(subject_type="student", subject_id=ids["Alice"],
+                            star_column_id=scid, value="ABS"))
+        db.session.commit()
+    html = admin.get(f"/modules/{mid}").get_data(as_text=True)
+    assert '<option value="ABS" selected>ABS</option>' in html
+    assert "st-red" in html
+    # Aucune autre cellule ne propose ABS.
+    assert html.count('value="ABS"') == 1
+
+
+def add_presence_column(app, admin, mid, title="Appel", date="2025-09-30"):
+    admin.post(f"/modules/{mid}/dates", data={"date": date})
+    with app.app_context():
+        did = GradeDate.query.order_by(GradeDate.id.desc()).first().id
+    admin.post(f"/dates/{did}/presence-columns", data={"title": title})
+    with app.app_context():
+        return did, PresenceColumn.query.order_by(PresenceColumn.id.desc()).first().id
+
+
+def test_presence_column_save_and_colors(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    did, pcid = add_presence_column(app, admin, mid)
+
+    for status, color in (("Absent", "red"), ("Retard", "orange"),
+                          ("Pas de PC", "orange"), ("Présent", None)):
+        r = admin.post(f"/modules/{mid}/save-presence", json={
+            "subject_id": ids["Alice"], "column_id": pcid, "value": status})
+        assert r.status_code == 200
+        assert r.get_json()["color"] == color
+    with app.app_context():
+        assert PresenceValue.query.one().status == "Présent"
+
+    admin.post(f"/modules/{mid}/save-presence", json={
+        "subject_id": ids["Bob"], "column_id": pcid, "value": "Absent"})
+    html = admin.get(f"/modules/{mid}").get_data(as_text=True)
+    assert "Appel" in html and 'class="presence-cell st-red"' in html
+
+    # Vider la cellule la remet à « non renseignée ».
+    admin.post(f"/modules/{mid}/save-presence", json={
+        "subject_id": ids["Bob"], "column_id": pcid, "value": ""})
+    with app.app_context():
+        assert PresenceValue.query.count() == 1
+
+    # Valeur inconnue refusée ; la présence n'influe pas sur la note.
+    r = admin.post(f"/modules/{mid}/save-presence", json={
+        "subject_id": ids["Alice"], "column_id": pcid, "value": "ABS"})
+    assert r.status_code == 400
+
+
+def test_presence_column_rename_move_delete_and_purge(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    did, a_id = add_presence_column(app, admin, mid, "A")
+    admin.post(f"/dates/{did}/presence-columns", data={"title": "B"})
+    with app.app_context():
+        b_id = PresenceColumn.query.filter_by(title="B").one().id
+    admin.post(f"/presence-columns/{a_id}/rename", data={"title": "Matin"})
+    admin.post(f"/presence-columns/{a_id}/move", data={"dir": "down"})
+    with app.app_context():
+        cols = PresenceColumn.query.order_by(PresenceColumn.position).all()
+        assert [c.id for c in cols] == [b_id, a_id]
+        assert db.session.get(PresenceColumn, a_id).title == "Matin"
+
+    admin.post(f"/modules/{mid}/save-presence", json={
+        "subject_id": ids["Alice"], "column_id": a_id, "value": "Absent"})
+    admin.post(f"/modules/{mid}/save-presence", json={
+        "subject_id": ids["Bob"], "column_id": b_id, "value": "Absent"})
+    admin.post(f"/presence-columns/{a_id}/delete")
+    with app.app_context():
+        assert PresenceValue.query.count() == 1
+    admin.post(f"/enrollments/{enr['Bob']}/delete")
+    with app.app_context():
+        assert PresenceValue.query.count() == 0
+
+
+def test_presence_refused_on_group_row(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin, work_mode="group")
+    admin.post(f"/modules/{mid}/groups", data={"name": "G1"})
+    with app.app_context():
+        gid = Group.query.first().id
+    admin.post(f"/groups/{gid}/members", data={"student_id": ids["Alice"]})
+    did, pcid = add_presence_column(app, admin, mid)
+    r = admin.post(f"/modules/{mid}/save-presence", json={
+        "subject_id": gid, "subject_type": "group", "column_id": pcid, "value": "Absent"})
+    assert r.status_code == 400
+    r = admin.post(f"/modules/{mid}/save-presence", json={
+        "subject_id": ids["Alice"], "subject_type": "student",
+        "column_id": pcid, "value": "Absent"})
+    assert r.status_code == 200
+
+
+def _synthesis_rows(resp):
+    ws = load_workbook(BytesIO(resp.data)).active
+    return [[c for c in row] for row in ws.iter_rows(values_only=True)]
+
+
+def _count(rows, label, col=1):
+    """Effectif d'un élément dans le premier tableau où il apparaît."""
+    return next(r[col] for r in rows if r[0] == label)
+
+
+def test_synthesis_defaults_to_latest_session(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    old_did, old_pc = add_presence_column(app, admin, mid, "Appel ancien", "2025-09-01")
+    did, pcid = add_presence_column(app, admin, mid, "Appel", "2025-09-30")
+    admin.post(f"/dates/{did}/star-columns", data={"title": "Exo"})
+    with app.app_context():
+        scid = StarColumn.query.one().id
+
+    admin.post(f"/modules/{mid}/save-presence", json={
+        "subject_id": ids["Alice"], "column_id": pcid, "value": "Absent"})
+    admin.post(f"/modules/{mid}/save-presence", json={
+        "subject_id": ids["Bob"], "column_id": pcid, "value": "Présent"})
+    admin.post(f"/modules/{mid}/save-star", json={
+        "subject_id": ids["Bob"], "column_id": scid, "value": "3"})
+    admin.post(f"/modules/{mid}/save-star", json={
+        "subject_id": ids["Chloe"], "column_id": scid, "value": "Retard"})
+
+    r = admin.get(f"/modules/{mid}/synthesis.xlsx")
+    assert r.status_code == 200
+    rows = _synthesis_rows(r)
+    flat = [c for row in rows for c in row if c is not None]
+    assert "Séance du 30/09/2025" in flat
+    assert "Séance du 01/09/2025" not in flat and "Appel ancien" not in flat
+    assert "Effectif : 3 étudiant(s)" in flat
+    assert _count(rows, "Présent") == 1
+    assert _count(rows, "Absent") == 1
+    assert _count(rows, "Non renseigné") == 1
+    assert _count(rows, "0") == 1          # Alice : jamais saisie
+    assert _count(rows, "★★★") == 1
+    # « Retard » figure dans les deux listes : la seconde occurrence est celle
+    # des étoiles.
+    retards = [r[1] for r in rows if r[0] == "Retard"]
+    assert retards == [0, 1]
+
+
+def test_synthesis_multiple_sessions_and_foreign_ids(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    d1, p1 = add_presence_column(app, admin, mid, "Appel 1", "2025-09-01")
+    d2, p2 = add_presence_column(app, admin, mid, "Appel 2", "2025-09-30")
+    r = admin.get(f"/modules/{mid}/synthesis.xlsx?dates={d2}&dates={d1}&dates=99999&dates=x")
+    flat = [c for row in _synthesis_rows(r) for c in row if c is not None]
+    # Ordre chronologique, quelle que soit celle de la requête.
+    assert flat.index("Séance du 01/09/2025") < flat.index("Séance du 30/09/2025")
+
+    # Séance d'un autre module : ignorée, on retombe sur la plus récente.
+    admin.post(f"/classes/{cid}/modules/new", data={"name": "Autre", "work_mode": "individual"})
+    with app.app_context():
+        other = Module.query.filter_by(name="Autre").first().id
+    admin.post(f"/modules/{other}/dates", data={"date": "2025-10-10"})
+    with app.app_context():
+        foreign = GradeDate.query.filter_by(module_id=other).one().id
+    r = admin.get(f"/modules/{mid}/synthesis.xlsx?dates={foreign}")
+    flat = [c for row in _synthesis_rows(r) for c in row if c is not None]
+    assert "Séance du 10/10/2025" not in flat
+    assert "Séance du 30/09/2025" in flat and "Séance du 01/09/2025" not in flat
+
+
+def test_synthesis_without_session_redirects(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    r = admin.get(f"/modules/{mid}/synthesis.xlsx")
+    assert r.status_code == 302
+
+
+def test_synthesis_button_next_to_ranking(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    did, pcid = add_presence_column(app, admin, mid)
+    html = admin.get(f"/modules/{mid}").get_data(as_text=True)
+    assert html.index("🏆 Classement") < html.index("📊 Synthèse")
+    assert f'name="dates" value="{did}"' in html
