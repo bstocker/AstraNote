@@ -260,11 +260,14 @@ def rename_school(school_id):
 @main_bp.route("/schools/<int:school_id>/details", methods=["POST"])
 @login_required
 def update_school_details(school_id):
-    """Contacts de facturation (emails) et observation libre d'une école."""
+    """Contacts de facturation (emails), contacts en copie, n° de contrat et
+    observation libre d'une école."""
     school = db.session.get(School, school_id) or abort(404)
     if not can_manage_owned(school):
         abort(403)
     school.billing_emails = request.form.get("billing_emails", "").strip() or None
+    school.billing_cc_emails = request.form.get("billing_cc_emails", "").strip() or None
+    school.contract_number = request.form.get("contract_number", "").strip() or None
     school.observation = request.form.get("observation", "").strip() or None
     db.session.commit()
     flash("Informations de facturation de l'école enregistrées.", "success")

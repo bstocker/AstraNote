@@ -359,6 +359,8 @@ def test_school_billing_and_class_rate(app, admin):
     # Infos de facturation de l'école
     admin.post(f"/schools/{sid}/details", data={
         "billing_emails": "compta@epsi.fr, direction@epsi.fr",
+        "billing_cc_emails": "assistante@epsi.fr",
+        "contract_number": "CT-2025-042",
         "observation": "Payer sous 30 jours.",
     })
     # Taux horaire de la classe (virgule décimale acceptée)
@@ -366,11 +368,14 @@ def test_school_billing_and_class_rate(app, admin):
     with app.app_context():
         s = db.session.get(School, sid)
         assert s.billing_emails == "compta@epsi.fr, direction@epsi.fr"
+        assert s.billing_cc_emails == "assistante@epsi.fr"
+        assert s.contract_number == "CT-2025-042"
         assert s.observation == "Payer sous 30 jours."
         assert db.session.get(Class, cid).hourly_rate == 55.5
     # Affichage sur la fiche de classe
     html = admin.get(f"/classes/{cid}").get_data(as_text=True)
     assert "compta@epsi.fr" in html and "55" in html
+    assert "assistante@epsi.fr" in html and "CT-2025-042" in html
 
 
 def test_invalid_hourly_rate_rejected(app, admin):

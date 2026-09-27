@@ -175,6 +175,8 @@
   <div class="muted" style="margin-top:12px;">
     <strong>École — {{ klass.school.name }}</strong><br>
     Contacts de facturation : {{ klass.school.billing_emails or '—' }}
+    {% if klass.school.billing_cc_emails %}<br>Contacts en copie (CC) : {{ klass.school.billing_cc_emails }}{% endif %}
+    {% if klass.school.contract_number %}<br>N° de contrat : {{ klass.school.contract_number }}{% endif %}
     {% if klass.school.observation %}<br>Observation : {{ klass.school.observation }}{% endif %}
     {% if current_user.is_admin or klass.school.teacher_id == current_user.id %}
       <br><a href="{{ url_for('main.schools') }}">Modifier les infos de facturation de l'école</a>

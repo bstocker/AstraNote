@@ -31,8 +31,11 @@ class School(db.Model):
     # Propriétaire : l'enseignant qui l'a créée. NULL = école commune (admin),
     # visible par tous les enseignants.
     teacher_id = db.Column(db.Integer, db.ForeignKey("teacher.id"), nullable=True)
-    # Facturation : destinataires des factures (emails) et observation libre.
+    # Facturation : destinataires des factures (emails), contacts en copie,
+    # numéro de contrat et observation libre.
     billing_emails = db.Column(db.String(500))
+    billing_cc_emails = db.Column(db.String(500))
+    contract_number = db.Column(db.String(100))
     observation = db.Column(db.Text)
 
     classes = db.relationship("Class", backref="school", cascade="all, delete-orphan")

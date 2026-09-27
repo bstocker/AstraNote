@@ -116,6 +116,9 @@ def _run_migrations(app):
     add_column_if_missing("school", "billing_emails", "VARCHAR(500)")
     add_column_if_missing("school", "observation", "TEXT")
     add_column_if_missing("class", "hourly_rate", "FLOAT")
+    # Évolution : contacts en copie et numéro de contrat de l'école.
+    add_column_if_missing("school", "billing_cc_emails", "VARCHAR(500)")
+    add_column_if_missing("school", "contract_number", "VARCHAR(100)")
     # Évolution : durée d'une séance en heures.
     add_column_if_missing("grade_date", "duration_hours", "FLOAT")
 
