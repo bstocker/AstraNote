@@ -108,9 +108,11 @@ def module_total_hours(module):
 
 
 def module_dates_sorted(module, recent_first=False):
-    """Séances triées par date.
+    """Séances triées par date, de la plus ancienne à la plus récente.
 
-    `recent_first` donne l'ordre du menu d'ajout de colonne : on travaille
+    C'est l'ordre des colonnes de la grille, quel que soit l'ordre de création :
+    une séance ajoutée après coup avec une date antérieure vient se ranger à sa
+    place. `recent_first` donne l'ordre du menu d'ajout de colonne : on travaille
     presque toujours sur la séance du jour, qui doit y venir en tête. Par
     défaut c'est l'ordre chronologique de lecture de la grille, celui du
     bandeau de saut entre séances.
@@ -428,7 +430,7 @@ def module_ranking(module_id):
 
     sessions = [
         {"date": gd, "places": grading.ranked_places(per_date[gd.id])}
-        for gd in module.grade_dates
+        for gd in module_dates_sorted(module)
     ]
     return render_template(
         "modules/ranking.html",
@@ -999,7 +1001,10 @@ def edit_date(date_id):
 def move_date(date_id):
     gd = db.session.get(GradeDate, date_id) or abort(404)
     module = get_module_or_403(gd.module_id)
-    _reorder(gd, module.grade_dates, request.form.get("dir", "up"))
+    # Les séances s'affichent par date : seul l'ordre entre séances du même
+    # jour (ou sans date) reste à la main de l'enseignant.
+    same_day = [g for g in module.grade_dates if g.date == gd.date]
+    _reorder(gd, same_day, request.form.get("dir", "up"))
     db.session.commit()
     return _module_redirect(module, f"date-{gd.id}")
 

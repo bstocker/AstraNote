@@ -187,7 +187,7 @@
     <thead>
       <tr>
         <th class="subject" rowspan="2">{{ 'Groupe / Étudiant' if module.is_group_mode else 'Étudiant' }}</th>
-        {% for gd in module.grade_dates %}
+        {% for gd in dates_asc %}
           {% set span = gd.star_columns|length + gd.url_columns|length + gd.text_columns|length + gd.presence_columns|length %}
           {#- data-date : seul lien entre une colonne et sa séance, dont se sert
               le filtrage « afficher la sélection » pour masquer les colonnes. -#}
@@ -217,7 +217,7 @@
         <th rowspan="2">Commentaire</th>
       </tr>
       <tr>
-        {% for gd in module.grade_dates %}
+        {% for gd in dates_asc %}
           {% for pc in gd.presence_columns %}
             <th class="presence-head" id="col-presence-{{ pc.id }}" data-date="{{ gd.id }}">{{ pc.title }} ✋
               <form method="post" action="{{ url_for('modules.delete_presence_column', col_id=pc.id) }}" style="display:inline;"
@@ -300,7 +300,7 @@
             </span>
           {% endif %}
         </td>
-        {% for gd in module.grade_dates %}
+        {% for gd in dates_asc %}
           {#- La présence est celle d'un étudiant : une ligne de groupe n'en a pas. -#}
           {% for pc in gd.presence_columns %}
             {% if subj.type == 'group' %}
@@ -498,7 +498,7 @@
       </form>
     {% endmacro %}
 
-    {% for gd in module.grade_dates %}
+    {% for gd in dates_asc %}
     <div class="manage-date">
       <div class="flex-between">
         <form method="post" action="{{ url_for('modules.edit_date', date_id=gd.id) }}" class="inline-form" style="flex:1;">
@@ -511,10 +511,14 @@
                    value="{{ gd.duration_hours|hours }}"></div>
           <div style="flex:0 0 auto;"><button class="btn small" type="submit">Enregistrer</button></div>
         </form>
+        {#- L'ordre des séances suit leur date : les flèches ne servent qu'à
+            départager plusieurs séances du même jour. -#}
+        {% if dates_asc|selectattr('date', 'equalto', gd.date)|list|length > 1 %}
         <div style="flex:0 0 auto; margin-left:8px;">
-          {{ mv(url_for('modules.move_date', date_id=gd.id), gd.id, 'up', 'Monter la date') }}
-          {{ mv(url_for('modules.move_date', date_id=gd.id), gd.id, 'down', 'Descendre la date') }}
+          {{ mv(url_for('modules.move_date', date_id=gd.id), gd.id, 'up', 'Monter la séance') }}
+          {{ mv(url_for('modules.move_date', date_id=gd.id), gd.id, 'down', 'Descendre la séance') }}
         </div>
+        {% endif %}
       </div>
       <ul class="manage-cols">
         {% for pc in gd.presence_columns %}

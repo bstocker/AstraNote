@@ -1990,3 +1990,43 @@ def test_synthesis_button_next_to_ranking(app, admin):
     html = admin.get(f"/modules/{mid}").get_data(as_text=True)
     assert html.index("🏆 Classement") < html.index("📊 Synthèse")
     assert f'name="dates" value="{did}"' in html
+
+
+# --------------------------------------------------------------------------- #
+# Ordre chronologique des colonnes de la grille
+# --------------------------------------------------------------------------- #
+def test_grid_columns_ordered_by_date_even_if_created_later(app, admin):
+    """Une séance créée après coup avec une date antérieure se range à gauche."""
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    for d, title in (("2025-10-15", "Exo octobre"), ("2025-09-01", "Exo septembre"),
+                     ("2025-11-20", "Exo novembre")):
+        admin.post(f"/modules/{mid}/dates", data={"date": d})
+        with app.app_context():
+            did = GradeDate.query.order_by(GradeDate.id.desc()).first().id
+        admin.post(f"/dates/{did}/star-columns", data={"title": title})
+
+    html = admin.get(f"/modules/{mid}").get_data(as_text=True)
+    grid = html[html.index('id="grid"'):]
+    assert (grid.index("01/09/2025") < grid.index("15/10/2025")
+            < grid.index("20/11/2025"))
+    assert (grid.index("Exo septembre") < grid.index("Exo octobre")
+            < grid.index("Exo novembre"))
+
+
+def test_move_date_only_reorders_same_day_sessions(app, admin):
+    from astranote.modules import module_dates_sorted
+
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    for d, label in (("2025-09-01", "Matin"), ("2025-09-01", "Après-midi"),
+                     ("2025-10-01", "Octobre")):
+        admin.post(f"/modules/{mid}/dates", data={"date": d, "label": label})
+    with app.app_context():
+        by_label = {g.label: g.id for g in GradeDate.query.all()}
+
+    # Octobre ne peut pas passer avant septembre.
+    admin.post(f"/dates/{by_label['Octobre']}/move", data={"dir": "up"})
+    # Deux séances du même jour : l'ordre reste réglable.
+    admin.post(f"/dates/{by_label['Après-midi']}/move", data={"dir": "up"})
+    with app.app_context():
+        order = [g.label for g in module_dates_sorted(db.session.get(Module, mid))]
+    assert order == ["Après-midi", "Matin", "Octobre"]
