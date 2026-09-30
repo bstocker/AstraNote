@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Facturation — AstraNote{% endblock %}
+{% block content %}
+<div class="flex-between">
+  <div>
+    <h1>Facturation</h1>
+    <p class="muted">
+      Séances réalisées de vos modules. Cochez un lot, extrayez-le en Excel, puis
+      notez la référence de la facture sur chaque séance : elle passe en grisé et
+      ne sera plus cochée d'office.
+    </p>
+  </div>
+</div>
+
+{% if not years %}
+  <div class="panel">
+    <p>Aucune année académique pour l'instant.</p>
+    <p class="muted">Commencez par créer une <a href="{{ url_for('main.schools') }}">école et une année académique</a>.</p>
+  </div>
+{% else %}
+  <form method="get" class="panel" style="display:flex; align-items:flex-end; gap:12px; margin-bottom:16px;">
+    <div style="flex:0 0 260px;">
+      <label>Année académique</label>
+      <select name="year" onchange="this.form.submit()">
+        {% for y in years %}
+          <option value="{{ y.id }}" {{ 'selected' if y.id == selected_year_id else '' }}>{{ y.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <noscript><button class="btn" type="submit">Afficher</button></noscript>
+  </form>
+
+  {% if not blocks %}
+    <div class="panel muted">Aucune séance réalisée pour cette année.</div>
+  {% else %}
+  {#- La coche n'est pas enregistrée : elle ne vaut que pour le lot en cours.
+      Les cases appartiennent à ce formulaire via l'attribut `form`, ce qui
+      laisse chaque module dans son propre panneau. -#}
+  <form id="billingForm" method="get" action="{{ url_for('billing.export_billing') }}"
+        data-save-url="{{ url_for('billing.save_session', date_id=0) }}">
+    <input type="hidden" name="year" value="{{ selected_year_id }}">
+  </form>
+  <div class="panel billing-bar">
+    <button type="button" class="btn secondary small" id="checkAll"
+            title="Coche les séances qui ne portent pas encore de référence de facturation">☑ Tout cocher</button>
+    <button type="button" class="btn secondary small" id="uncheckAll">☐ Tout décocher</button>
+    <span class="billing-total" id="billingTotal">Sélection : 0 séance · 0 h</span>
+    <button type="submit" class="btn small" form="billingForm" id="exportBtn" disabled>⬇ Extraire la sélection (.xlsx)</button>
+  </div>
+
+  {% for b in blocks %}
+  <div class="panel billing-module" data-module="{{ b.module.id }}">
+    <div class="flex-between">
+      <div>
+        <h2 style="margin:0;">
+          <a href="{{ url_for('modules.view_module', module_id=b.module.id) }}">{{ b.module.name }}</a>
+          <span class="muted" style="font-weight:400; font-size:14px;">· {{ b.klass.name }} · {{ b.school.name }}</span>
+        </h2>
+        <p class="muted" style="margin:4px 0 0; font-size:12px;">
+          Contacts : {{ b.school.billing_emails or '—' }}
+          {% if b.school.billing_cc_emails %} · CC : {{ b.school.billing_cc_emails }}{% endif %}
+          {% if b.school.contract_number %} · Contrat n° {{ b.school.contract_number }}{% endif %}
+          {% if b.klass.hourly_rate is not none %} · {{ b.klass.hourly_rate|hours }} €/h{% endif %}
+        </p>
+      </div>
+      <div class="muted" style="font-size:13px; text-align:right;">
+        {{ b.hours|hours or '0' }} h réalisées<br>
+        <strong>{{ b.unbilled|hours or '0' }} h non facturées</strong>
+      </div>
+    </div>
+    <table class="list-table billing-table">
+      <thead>
+        <tr><th style="width:36px;"></th><th>Date</th><th>Libellé</th>
+            <th style="width:110px;">Heures</th><th>N° / texte libre</th></tr>
+      </thead>
+      <tbody>
+        {% for gd in b.sessions %}
+        <tr class="billing-row{{ ' billed' if is_billed(gd) else '' }}" data-session="{{ gd.id }}">
+          <td><input type="checkbox" name="sessions" value="{{ gd.id }}" form="billingForm"
+                     class="billing-check" aria-label="Sélectionner la séance"></td>
+          <td>{{ gd.date.strftime('%d/%m/%Y') if gd.date else 'Sans date' }}</td>
+          <td>{{ gd.label or '' }}</td>
+          <td><input type="number" class="billing-hours" step="0.25" min="0" max="{{ max_duration }}"
+                     inputmode="decimal" value="{{ gd.duration_hours|hours|replace(',', '.') }}"
+                     placeholder="h" title="Durée de la séance (corrige aussi celle du module)"></td>
+          <td><input type="text" class="billing-ref" maxlength="120" value="{{ gd.billing_ref or '' }}"
+                     placeholder="N° de facture…"></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endfor %}
+  {% endif %}
+{% endif %}
+
+<!-- ---------------- Bilan NDA ---------------- -->
+<div class="panel">
+  <h2 style="margin-top:0;">Bilan NDA (bilan pédagogique et financier)</h2>
+  <p class="help">
+    Toutes vos classes, toutes années confondues, sur la période choisie :
+    étudiants uniques inscrits et non neutralisés, heures des séances par module,
+    heures-stagiaires (heures × étudiants) par école et par niveau (cadre G), et
+    CA estimé à partir du taux horaire des classes (cadre C). Le niveau se règle
+    sur la fiche de chaque classe.
+  </p>
+  <form method="get" action="{{ url_for('billing.export_nda') }}" class="inline-form">
+    <div style="flex:0 0 170px;"><label>Du</label><input type="date" name="start" value="{{ nda_start.isoformat() }}"></div>
+    <div style="flex:0 0 170px;"><label>Au</label><input type="date" name="end" value="{{ nda_end.isoformat() }}"></div>
+    <div style="flex:0 0 auto;"><button class="btn small" type="submit">⬇ Extraire le bilan (.xlsx)</button></div>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/billing.js') }}"></script>
+{% endblock %}

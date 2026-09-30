@@ -599,3 +599,20 @@ table.planning tr:hover td.slot:not(.out) { outline: 1px solid var(--border); }
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
+
+/* Page de facturation */
+.billing-bar {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.billing-total { font-weight: 700; margin-left: auto; }
+.billing-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+.billing-table td { padding: 5px 10px; }
+.billing-table input[type=checkbox] { width: auto; margin: 0; }
+.billing-table .billing-hours { width: 80px; }
+.billing-table .billing-ref { width: 100%; }
+.billing-row.checked td { background: #eef2ff; }
+/* Séance facturée (référence saisie) : grisée, toujours modifiable. */
+.billing-row.billed td { color: var(--grey); background: #f1f5f9; }
+.billing-row.billed input { color: var(--grey); background: #f8fafc; }
+.billing-row.billed.checked td { background: #e2e8f0; }

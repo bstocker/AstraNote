@@ -342,6 +342,7 @@ def create_class():
             klass = Class(
                 name=name, school_id=school_id,
                 academic_year_id=year_id, teacher_id=teacher_id,
+                level=request.form.get("level", "").strip() or None,
             )
             db.session.add(klass)
             db.session.commit()
@@ -366,8 +367,11 @@ def view_class(class_id):
 @main_bp.route("/classes/<int:class_id>/billing", methods=["POST"])
 @login_required
 def update_class_billing(class_id):
-    """Taux horaire €/h de la classe (pour la facturation)."""
+    """Taux horaire €/h et niveau de la classe (facturation, bilan NDA)."""
     klass = get_class_or_403(class_id)
+    # Champ absent du formulaire = niveau inchangé.
+    if "level" in request.form:
+        klass.level = request.form.get("level", "").strip() or None
     raw = request.form.get("hourly_rate", "").strip().replace(",", ".")
     if raw == "":
         klass.hourly_rate = None
@@ -381,7 +385,7 @@ def update_class_billing(class_id):
             return redirect(url_for("main.view_class", class_id=class_id))
         klass.hourly_rate = rate
     db.session.commit()
-    flash("Taux horaire enregistré.", "success")
+    flash("Informations de facturation enregistrées.", "success")
     return redirect(url_for("main.view_class", class_id=class_id))
 
 

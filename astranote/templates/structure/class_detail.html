@@ -170,6 +170,11 @@
       <input type="number" step="0.01" min="0" name="hourly_rate"
              value="{{ klass.hourly_rate if klass.hourly_rate is not none else '' }}" placeholder="ex. 55">
     </div>
+    <div style="flex:0 0 220px;">
+      <label>Niveau</label>
+      <input type="text" name="level" value="{{ klass.level or '' }}" placeholder="Bachelor, Mastère, L3…"
+             title="Regroupe les classes d'une école dans le bilan NDA">
+    </div>
     <div style="flex:0 0 auto;"><button class="btn small" type="submit">Enregistrer</button></div>
   </form>
   <div class="muted" style="margin-top:12px;">

@@ -82,7 +82,11 @@ finales restent saisies à la main par l'enseignant.
 - **Dashboard de classement** par module : podium général et podium par séance.
 - **Suivi de la transmission des notes** à l'établissement (envoyé ou non, date,
   moyen, précision libre), remonté sur le tableau de bord.
-- **Facturation** : taux horaire par classe, contacts et observation par école.
+- **Facturation** : taux horaire et niveau par classe, contacts et observation par école.
+  Page dédiée : séances réalisées par module, lot coché extrait en Excel avec le
+  total des heures, référence de facture par séance (séance grisée).
+- **Bilan NDA** : export Excel des étudiants uniques, heures par module,
+  heures-stagiaires par école et niveau (cadre G) et CA estimé (cadre C).
 - **Export / import Excel** des notes manuelles d'un module (les membres d'un
   groupe y figurent avec leurs propres notes).
 - **Administration** : compteurs de la base et téléchargement de la sauvegarde en

@@ -76,6 +76,9 @@ class Class(db.Model):
     academic_year_id = db.Column(db.Integer, db.ForeignKey("academic_year.id"), nullable=False)
     teacher_id = db.Column(db.Integer, db.ForeignKey("teacher.id"), nullable=False)
     hourly_rate = db.Column(db.Float)  # taux horaire €/h pour la facturation
+    # Niveau (Bachelor, Mastère, L3…) : regroupe les classes d'une école dans
+    # le bilan NDA (cadre G, heures-stagiaires par école et par niveau).
+    level = db.Column(db.String(60))
 
     modules = db.relationship("Module", backref="klass", cascade="all, delete-orphan")
     enrollments = db.relationship("Enrollment", backref="klass", cascade="all, delete-orphan")
@@ -126,6 +129,10 @@ class GradeDate(db.Model):
     # durée connue. Sert au cumul d'heures du module (cf. taux horaire de la
     # classe), jamais au calcul des notes.
     duration_hours = db.Column(db.Float)
+    # Référence de facturation libre (n° de facture, de lot…). Une séance qui
+    # en porte une est considérée comme facturée : grisée sur la page de
+    # facturation et exclue du « tout cocher ».
+    billing_ref = db.Column(db.String(120))
 
     star_columns = db.relationship(
         "StarColumn", backref="grade_date", cascade="all, delete-orphan",

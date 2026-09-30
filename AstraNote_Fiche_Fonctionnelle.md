@@ -129,7 +129,7 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
 - CRUD **écoles**, **années académiques**, **classes**.
 - **Chaque enseignant peut créer, renommer et supprimer ses propres écoles et années** ; il ne voit que les siennes plus les **écoles/années communes** créées par l'administrateur (renommables/supprimables par l'admin seul).
 - Association d'une classe à une école + une année (choisies parmi celles visibles par l'enseignant).
-- **Facturation** : pour chaque **école**, contacts de facturation (emails des destinataires des factures), **contacts en copie (CC)**, **n° de contrat** et **observation libre** ; pour chaque **classe**, **taux horaire €/h**. Ces informations sont consultables depuis la fiche de la classe.
+- **Facturation** : pour chaque **école**, contacts de facturation (emails des destinataires des factures), **contacts en copie (CC)**, **n° de contrat** et **observation libre** ; pour chaque **classe**, **taux horaire €/h** et **niveau** (Bachelor, Mastère, L3… — regroupement du bilan NDA). Ces informations sont consultables depuis la fiche de la classe.
 - Duplication d'une classe d'une année sur l'autre (report de la structure sans les étoiles).
 
 ### 5.3 Modules, dates et colonnes
@@ -166,7 +166,7 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
 - L'ouverture d'un module affiche un **tableau** unique servant à la fois à **consulter** et à **saisir les étoiles**.
 - Disposition du tableau :
   - **Lignes** = étudiants (ou **groupes** en mode groupe) ;
-  - **Colonnes** = colonnes d'étoiles (exercices) **regroupées par date** (en-tête à deux niveaux : date, puis titre d'exercice) ;
+  - **Colonnes** = colonnes d'étoiles (exercices) **regroupées par date** (en-tête à deux niveaux : date, puis titre d'exercice), rangées de la **date la plus ancienne (à gauche) à la plus récente (à droite)**, quel que soit l'ordre de création : une séance ajoutée après coup avec une date antérieure se range à sa place ;
   - **Colonnes URL** possibles sous une date (liens cliquables) ;
   - **Colonnes de fin** : total d'étoiles, **note d'étoiles /20** (auto), colonnes de notes manuelles (Note CC, Note Examen… — **fond jaune, gras**), et commentaire général.
 - Saisie rapide des étoiles (0 à 4) au clic/clavier directement dans la cellule.
@@ -232,16 +232,25 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
 
 ---
 
+### 5.12 Facturation et bilan NDA
+- Page **Facturation** (menu et bouton à côté de « Planning »), filtrée par année académique : pour chaque module, la liste des **séances réalisées** (date passée ou non renseignée), avec une **case à cocher**, la **durée** (reprise de la séance, modifiable — la corriger ici la corrige aussi dans le module) et une zone de **texte libre** (n° de facture…).
+- **Lot de facturation** : les séances cochées s'extraient en `.xlsx`, module par module (école, contacts de facturation, CC, n° de contrat, taux horaire, séances, texte), avec le **sous-total d'heures** de chaque module (et le montant si le taux horaire est connu) et le **total général**. Le total de la sélection s'affiche en direct sur la page.
+- Une séance qui porte un texte est **grisée** (considérée comme facturée). La coche n'est **jamais enregistrée** : au passage suivant, les séances grisées restent grisées mais décochées. **Tout cocher** ne coche que les séances non grisées (les grisées restent cochables une à une) ; **Tout décocher** vide la sélection.
+- **Bilan NDA** (extraction `.xlsx` sur une période, par défaut l'année civile en cours), toutes classes de l'enseignant confondues :
+  - **Cadre G** : nombre d'**étudiants uniques** inscrits et non neutralisés (dans une classe ayant eu au moins une séance sur la période), **heures d'enseignement** par module, **heures-stagiaires** (heures du module × étudiants actifs de la classe) cumulées **par école et par niveau** ;
+  - **Cadre C** : **CA estimé** = heures × taux horaire de la classe (les classes sans taux sont signalées et exclues).
+  - Les effectifs sont ceux du jour de l'extraction : ré-extraire après mise à jour des inscriptions (ex. ESIEE-IT en janvier).
+
 ## 6. Modèle de données (SQLite)
 
 ```
 School(id, name, teacher_id, billing_emails, billing_cc_emails, contract_number, observation)  # facturation
 AcademicYear(id, label, teacher_id)           # ex. "2025-2026" ; NULL = année commune (admin)
 Teacher(id, name, email, password_hash, role) # role = admin | teacher
-Class(id, name, school_id, academic_year_id, teacher_id, hourly_rate)  # hourly_rate = taux horaire €/h
+Class(id, name, school_id, academic_year_id, teacher_id, hourly_rate, level)  # hourly_rate = taux horaire €/h ; level = niveau (bilan NDA)
 Module(id, name, discord_url, discord_ref_url, class_id, work_mode,   # work_mode = individual | group
        notes_sent, notes_sent_date, notes_sent_method, notes_sent_detail)  # transmission des notes à l'établissement
-GradeDate(id, module_id, label, date, position, duration_hours)  # une date/séance ; duration_hours = durée en heures (facultative)
+GradeDate(id, module_id, label, date, position, duration_hours, billing_ref)  # une date/séance ; duration_hours = durée en heures (facultative) ; billing_ref = référence de facturation (séance facturée si non vide)
 StarColumn(id, grade_date_id, title, position)        # colonne d'étoiles ; title = titre de l'exercice
 UrlColumn(id, grade_date_id, title, position)         # colonne de liens rattachée à une date
 NoteColumn(id, module_id, title, position)            # "Note CC", "Note Examen"... (affichage fond jaune, gras)

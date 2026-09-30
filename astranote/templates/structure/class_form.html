@@ -7,6 +7,9 @@
 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>Nom de la classe / promotion</label>
     <input type="text" name="name" placeholder="B3 ASRBD" required>
+    <label>Niveau (opt.)</label>
+    <input type="text" name="level" placeholder="Bachelor, Mastère, L3…">
+    <p class="help">Sert à regrouper les classes d'une école dans le bilan NDA (heures-stagiaires par niveau).</p>
     <div class="row">
       <div>
         <label>École</label>

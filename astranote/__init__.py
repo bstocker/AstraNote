@@ -39,11 +39,13 @@ def create_app(config_object=Config):
     from .main import main_bp
     from .modules import modules_bp
     from .planning import planning_bp
+    from .billing import billing_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
     app.register_blueprint(modules_bp)
     app.register_blueprint(planning_bp)
+    app.register_blueprint(billing_bp)
 
     @app.errorhandler(413)
     def too_large(_err):
@@ -121,6 +123,9 @@ def _run_migrations(app):
     add_column_if_missing("school", "contract_number", "VARCHAR(100)")
     # Évolution : durée d'une séance en heures.
     add_column_if_missing("grade_date", "duration_hours", "FLOAT")
+    # Évolution : facturation des séances et niveau des classes (bilan NDA).
+    add_column_if_missing("grade_date", "billing_ref", "VARCHAR(120)")
+    add_column_if_missing("class", "level", "VARCHAR(60)")
 
     # Réparation : affectations de groupe pointant vers un étudiant supprimé.
     # Avant la cascade `Student.group_memberships`, retirer un étudiant de sa
