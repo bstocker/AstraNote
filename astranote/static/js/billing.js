@@ -35,12 +35,14 @@
     setTimeout(() => { el.style.backgroundColor = ""; }, 350);
   }
 
-  async function save(row, payload, input) {
+  async function save(row, payload, input, keepalive = false) {
+    input.dataset.saved = input.value;
     const url = form.dataset.saveUrl.replace("/seances/0", "/seances/" + row.dataset.session);
     const job = fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF },
       body: JSON.stringify(payload),
+      keepalive: keepalive,
     }).then(async (res) => {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Erreur d'enregistrement");
@@ -53,6 +55,7 @@
   }
 
   rows.forEach((row) => {
+    row.querySelectorAll(".billing-hours, .billing-ref").forEach((i) => { i.dataset.saved = i.value; });
     row.querySelector(".billing-check").addEventListener("change", refresh);
     const hours = row.querySelector(".billing-hours");
     hours.addEventListener("input", refresh);
@@ -61,6 +64,17 @@
     // Grisé dès la frappe ; la coche reste en l'état pour le lot en cours.
     ref.addEventListener("input", () => row.classList.toggle("billed", ref.value.trim() !== ""));
     ref.addEventListener("change", () => save(row, { billing_ref: ref.value }, ref));
+  });
+
+  // Rafraîchissement ou départ de la page, curseur encore dans un champ : le
+  // « change » n'a pas eu lieu, on envoie quand même la saisie.
+  window.addEventListener("pagehide", () => {
+    rows.forEach((row) => {
+      const hours = row.querySelector(".billing-hours");
+      const ref = row.querySelector(".billing-ref");
+      if (hours.value !== hours.dataset.saved) save(row, { duration_hours: hours.value }, hours, true);
+      if (ref.value !== ref.dataset.saved) save(row, { billing_ref: ref.value }, ref, true);
+    });
   });
 
   // « Tout cocher » ne coche que ce qui reste à facturer : les séances

@@ -36,11 +36,14 @@
     };
   }
 
-  async function postJSON(url, payload) {
+  // `keepalive` laisse partir la requête même si la page se ferme ou se
+  // recharge : c'est le dernier enregistrement d'un texte en cours de frappe.
+  async function postJSON(url, payload, keepalive = false) {
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-CSRFToken": CSRF },
       body: JSON.stringify(payload),
+      keepalive: keepalive,
     });
     if (!res.ok) {
       let msg = "Erreur d'enregistrement";
@@ -177,34 +180,49 @@
     });
   });
 
-  // --- Commentaire libre d'une séance ---
-  grid.querySelectorAll(".text-input").forEach((inp) => {
-    inp.addEventListener("change", async () => {
-      const cell = inp.closest(".text-cell");
+  // --- Textes libres : remarque de séance et commentaire ---
+  // Enregistrés pendant la frappe (après une courte pause), et non plus
+  // seulement à la sortie du champ : un « change » n'est émis qu'au blur, si
+  // bien qu'une remarque tapée puis suivie d'un rafraîchissement de la page,
+  // curseur encore dans la zone, n'était jamais envoyée et disparaissait.
+  const flushers = [];
+
+  function autoSave(inp, cell, url, extra) {
+    let saved = inp.value;
+    let timer = null;
+    async function send(keepalive) {
+      clearTimeout(timer);
+      const value = inp.value;
+      if (value === saved) return;
+      const previous = saved;
+      saved = value;
       try {
-        await postJSON(urls.text, {
-          ...subjectOf(cell),
-          column_id: Number(cell.dataset.column),
-          value: inp.value,
-        });
-        flash(cell, true);
-      } catch (e) { flash(cell, false); alert(e.message); }
+        await postJSON(url, { ...subjectOf(cell), ...extra, value: value }, keepalive);
+        if (!keepalive) flash(cell, true);
+      } catch (e) {
+        saved = previous;   // le prochain essai renverra le texte
+        if (!keepalive) { flash(cell, false); alert(e.message); }
+      }
+    }
+    inp.addEventListener("input", () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => send(false), 800);
     });
+    inp.addEventListener("change", () => send(false));
+    flushers.push(() => send(true));
+  }
+
+  grid.querySelectorAll(".text-input").forEach((inp) => {
+    const cell = inp.closest(".text-cell");
+    autoSave(inp, cell, urls.text, { column_id: Number(cell.dataset.column) });
+  });
+  grid.querySelectorAll(".comment-input").forEach((inp) => {
+    autoSave(inp, inp.closest(".comment-cell"), urls.comment, {});
   });
 
-  // --- Commentaires ---
-  grid.querySelectorAll(".comment-input").forEach((inp) => {
-    inp.addEventListener("change", async () => {
-      const cell = inp.closest(".comment-cell");
-      try {
-        await postJSON(urls.comment, {
-          ...subjectOf(cell),
-          value: inp.value,
-        });
-        flash(cell, true);
-      } catch (e) { flash(cell, false); alert(e.message); }
-    });
-  });
+  // Départ de la page (rafraîchissement, lien, fermeture) : on envoie ce qui
+  // n'a pas encore pu l'être.
+  window.addEventListener("pagehide", () => flushers.forEach((f) => f()));
 
   // --- Couleur de fond de la cellule sujet ---
   grid.querySelectorAll(".color-picker").forEach((picker) => {
