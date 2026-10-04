@@ -615,6 +615,10 @@ ul.requests li {
 /* Page publique : pas de barre de navigation, l'en-tête porte l'identité. */
 .public-head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
 .public-head img.logo { height: 40px; }
+/* Le client découvre la page : le nom de son lien et le mode d'emploi doivent
+   se lire sans effort, pas comme une note de bas de page. */
+.public-sub { font-size: 16px; color: var(--ink); margin: 0; }
+.public-intro { font-size: 14px; line-height: 1.5; color: #334155; margin: 0 0 14px; max-width: 860px; }
 
 /* Texte réservé aux lecteurs d'écran : sur la page publique, une cellule
    colorée est la seule information — il lui faut un équivalent lisible. */

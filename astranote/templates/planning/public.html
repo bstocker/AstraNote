@@ -11,11 +11,11 @@
   <img class="logo" src="{{ url_for('static', filename='img/logo.png') }}" alt="AstraNote">
   <div>
     <h1>Disponibilités de {{ teacher.name }}</h1>
-    <p class="muted">{{ link.name }} · année {{ year.label }}</p>
+    <p class="public-sub"><strong>{{ link.name }}</strong> · année {{ year.label }}</p>
   </div>
 </div>
 
-<p class="help">Cochez les demi-journées libres que vous souhaitez réserver :
+<p class="public-intro">Cochez les demi-journées libres que vous souhaitez réserver :
   votre demande est enregistrée aussitôt et transmise à {{ teacher.name }}, qui
   la validera. Tant qu'elle n'est pas validée, vous pouvez la retirer en
   décochant la case. Les demi-journées en rouge ne sont plus disponibles ; la
