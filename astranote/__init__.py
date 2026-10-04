@@ -126,6 +126,26 @@ def _run_migrations(app):
     # Évolution : facturation des séances et niveau des classes (bilan NDA).
     add_column_if_missing("grade_date", "billing_ref", "VARCHAR(120)")
     add_column_if_missing("class", "level", "VARCHAR(60)")
+    # Évolution : demandes de réservation déposées depuis un lien de partage.
+    add_column_if_missing("planning_slot", "link_id", "INTEGER")
+    add_column_if_missing("planning_slot", "pending", "BOOLEAN NOT NULL DEFAULT 0")
+
+    # Évolution : plusieurs liens nommés par année. L'ancienne table portait
+    # une contrainte « un lien par enseignant et par année » que SQLite ne sait
+    # pas retirer : ses liens sont repris dans la nouvelle, jeton inchangé pour
+    # que les adresses déjà diffusées continuent de fonctionner.
+    if "planning_share" in inspector.get_table_names():
+        moved = db.session.execute(text(
+            "INSERT INTO planning_link"
+            " (teacher_id, academic_year_id, token, name, color, created_at)"
+            " SELECT teacher_id, academic_year_id, token, 'Lien de partage',"
+            " '#fde68a', created_at FROM planning_share"
+            " WHERE token NOT IN (SELECT token FROM planning_link)"
+        )).rowcount
+        db.session.execute(text("DROP TABLE planning_share"))
+        db.session.commit()
+        app.logger.warning(
+            "Migration : %s lien(s) de partage repris dans planning_link.", moved)
 
     # Réparation : affectations de groupe pointant vers un étudiant supprimé.
     # Avant la cascade `Student.group_memberships`, retirer un étudiant de sa

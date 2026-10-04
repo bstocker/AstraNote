@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "planning/_table.html" import planning_table, planning_legend with context %}
-{% block title %}Disponibilités de {{ teacher.name }} — {{ year.label }}{% endblock %}
+{% block title %}Disponibilités de {{ teacher.name }} — {{ link.name }}{% endblock %}
 {% block head_extra %}
 {#- Un lien de partage se diffuse par mail ou par message, jamais par moteur de
     recherche : le jeton perdrait tout son rôle de secret s'il était indexé. -#}
@@ -11,14 +11,23 @@
   <img class="logo" src="{{ url_for('static', filename='img/logo.png') }}" alt="AstraNote">
   <div>
     <h1>Disponibilités de {{ teacher.name }}</h1>
-    <p class="muted">Année {{ year.label }} · consultation seule</p>
+    <p class="muted">{{ link.name }} · année {{ year.label }}</p>
   </div>
 </div>
 
-<p class="help">Les demi-journées en rouge sont déjà réservées par des cours.
-  Les autres sont disponibles. Cette page est mise à jour en direct par
-  {{ teacher.name }} ; elle ne peut pas être modifiée depuis ce lien.</p>
+<p class="help">Cochez les demi-journées libres que vous souhaitez réserver :
+  votre demande est enregistrée aussitôt et transmise à {{ teacher.name }}, qui
+  la validera. Tant qu'elle n'est pas validée, vous pouvez la retirer en
+  décochant la case. Les demi-journées en rouge ne sont plus disponibles ; la
+  page se met à jour en direct.</p>
 
-{{ planning_legend(start, end, reserved, has_current) }}
-{{ planning_table(months) }}
+{{ planning_legend(start, end, reserved, has_current, mode='book', color=link.color) }}
+{{ planning_table(months, 'book',
+                  url_for('planning.public_slot', token=link.token),
+                  url_for('planning.public_state', token=link.token),
+                  color=link.color) }}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/planning.js') }}"></script>
 {% endblock %}

@@ -10,6 +10,8 @@ from datetime import date as date_type, datetime
 
 from flask_login import UserMixin
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import event
+from sqlalchemy.orm import Session
 
 db = SQLAlchemy()
 
@@ -346,6 +348,13 @@ class PlanningSlot(db.Model):
     « disponible » : le planning d'une année vierge ne coûte donc rien en base,
     et décocher une case supprime simplement la ligne.
 
+    Une **demande de réservation** déposée par un client depuis un lien de
+    partage est la même ligne, marquée `pending` et rattachée à son lien : la
+    contrainte d'unicité fait alors tout le travail d'exclusivité — tant que la
+    demande existe, ni l'enseignant ni un autre client ne peut prendre la
+    demi-journée. La valider revient à lever `pending` ; le lien reste attaché
+    pour savoir à quel client la demi-journée a été accordée.
+
     L'année académique n'est pas stockée : elle se déduit de la date (cf.
     `planning.year_bounds`). Une seule vérité, et redéfinir les bornes d'une
     année ne laisse pas de réservations orphelines derrière elle.
@@ -355,6 +364,8 @@ class PlanningSlot(db.Model):
     teacher_id = db.Column(db.Integer, db.ForeignKey("teacher.id"), nullable=False)
     date = db.Column(db.Date, nullable=False)
     half = db.Column(db.String(2), nullable=False)  # am | pm
+    link_id = db.Column(db.Integer, db.ForeignKey("planning_link.id"))
+    pending = db.Column(db.Boolean, nullable=False, default=False)
 
     teacher = db.relationship(
         "Teacher",
@@ -367,34 +378,58 @@ class PlanningSlot(db.Model):
     )
 
 
-class PlanningShare(db.Model):
-    """Lien public de consultation du planning d'un enseignant pour une année.
+# Couleurs proposées tour à tour à la création d'un lien. Aucune n'est proche
+# du rouge des demi-journées « Non disponible » : une demande doit se
+# distinguer d'un cours au premier regard.
+LINK_COLORS = ("#fde68a", "#bbf7d0", "#bfdbfe", "#ddd6fe", "#fed7aa", "#a5f3fc")
 
-    Le jeton vaut mot de passe : il donne un accès en **lecture seule** sans
-    authentification. Un lien par (enseignant, année), régénérable — régénérer
-    remplace le jeton, ce qui invalide le lien précédemment diffusé.
+
+class PlanningLink(db.Model):
+    """Lien de réservation du planning d'un enseignant, remis à un client.
+
+    Le jeton vaut mot de passe : sans compte, il permet de consulter les
+    disponibilités de l'année et de **demander** des demi-journées libres.
+    Chaque client reçoit son propre lien, nommé et coloré : les demandes
+    apparaissent dans cette couleur sur le planning de l'enseignant, qui les
+    valide ou les refuse. Supprimer le lien coupe l'accès de ce client seul.
     """
-    __tablename__ = "planning_share"
+    __tablename__ = "planning_link"
     id = db.Column(db.Integer, primary_key=True)
     teacher_id = db.Column(db.Integer, db.ForeignKey("teacher.id"), nullable=False)
     academic_year_id = db.Column(db.Integer, db.ForeignKey("academic_year.id"),
                                  nullable=False)
     token = db.Column(db.String(64), nullable=False, unique=True, index=True)
+    name = db.Column(db.String(80), nullable=False)
+    color = db.Column(db.String(7), nullable=False, default=LINK_COLORS[0])  # #rrggbb
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
     teacher = db.relationship(
         "Teacher",
-        backref=db.backref("planning_shares", cascade="all, delete-orphan"),
+        backref=db.backref("planning_links", cascade="all, delete-orphan"),
     )
     academic_year = db.relationship(
         "AcademicYear",
-        backref=db.backref("planning_shares", cascade="all, delete-orphan"),
+        backref=db.backref("planning_links", cascade="all, delete-orphan"),
     )
+    # Pas de cascade : les demi-journées validées survivent à leur lien (elles
+    # sont devenues des réservations de l'enseignant). Seules les demandes en
+    # attente partent avec lui, cf. `_drop_pending_requests`.
+    slots = db.relationship("PlanningSlot", backref="link")
 
-    __table_args__ = (
-        db.UniqueConstraint("teacher_id", "academic_year_id",
-                            name="uq_planning_share_teacher_year"),
-    )
+
+@event.listens_for(Session, "before_flush")
+def _drop_pending_requests(session, _context, _instances):
+    """Un lien supprimé emporte ses demandes en attente.
+
+    Fait ici plutôt que dans la route de suppression : un lien disparaît aussi
+    par cascade (année ou enseignant supprimé), et une demande orpheline
+    bloquerait la demi-journée sans que personne puisse plus la valider.
+    """
+    for obj in list(session.deleted):
+        if isinstance(obj, PlanningLink):
+            for slot in list(obj.slots):
+                if slot.pending:
+                    session.delete(slot)
 
 
 class SubjectColor(db.Model):

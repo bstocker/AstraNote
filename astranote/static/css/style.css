@@ -529,6 +529,8 @@ details.synth-menu > summary::-webkit-details-marker { display: none; }
   width: 13px; height: 13px; border-radius: 3px; border: 1px solid var(--border);
 }
 .legend .key.busy { background: #fecaca; border-color: #f87171; }
+.legend .key.request { background: var(--req, #fde68a); border-color: rgba(15, 23, 42, .25); }
+.legend .key.granted::after { content: "✓"; display: block; font-size: 10px; line-height: 12px; text-align: center; }
 .legend .key.free { background: #fff; }
 .legend .key.out { background: #f1f5f9; border-style: dashed; }
 
@@ -576,6 +578,14 @@ table.planning tr.current-week th.week {
 /* Demi-journée : blanche = disponible, rouge = réservée pour un cours. */
 table.planning td.slot { width: 38px; height: 22px; background: #fff; }
 table.planning td.slot.busy { background: #fecaca; }
+/* Demande d'un client : la couleur est celle de son lien, portée par --req. */
+table.planning td.slot.request, table.planning td.slot.granted {
+  background: var(--req, #fde68a);
+}
+/* Vue du client : sa demande une fois validée, sans case à décocher. */
+table.planning td.slot.granted::after { content: "✓"; font-weight: 700; color: rgba(15, 23, 42, .7); }
+table.planning td.slot.past { background: #f8fafc; }
+table.planning td.slot input.slot-box:disabled { display: none; }
 table.planning td.slot.out {
   background: repeating-linear-gradient(135deg, #f8fafc 0 4px, #eef2f7 4px 8px);
 }
@@ -588,6 +598,19 @@ table.planning tr:hover td.slot:not(.out) { outline: 1px solid var(--border); }
 /* Lien de partage : le champ occupe la place, les boutons suivent. */
 .share-row { display: flex; gap: 8px; align-items: center; }
 .share-row input { flex: 1; font-family: ui-monospace, monospace; font-size: 12px; }
+
+/* Un lien par client : pastille de couleur, adresse, demandes à traiter. */
+.share-link { padding: 10px 0; border-bottom: 1px solid var(--border); }
+.share-link-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.share-link-head .muted { font-size: 12px; }
+ul.requests { list-style: none; margin: 8px 0; padding: 0; font-size: 13px; }
+ul.requests li {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 3px 0;
+}
+.share-new { margin-top: 14px; }
+#requestsStale[hidden] { display: none; }
+.share-new input[type="color"] { width: 56px; height: 34px; padding: 2px; cursor: pointer; }
 
 /* Page publique : pas de barre de navigation, l'en-tête porte l'identité. */
 .public-head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }

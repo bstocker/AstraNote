@@ -7,7 +7,8 @@
     <h1>Planning</h1>
     <p class="muted">
       Cochez les demi-journées que vous réservez pour vos cours : elles passent
-      en « Non disponible ». Tout le reste est considéré comme disponible.
+      en « Non disponible ». Tout le reste est considéré comme disponible, et
+      peut vous être demandé par un client depuis un lien de partage.
     </p>
   </div>
 </div>
@@ -31,49 +32,89 @@
     <noscript><button class="btn" type="submit">Afficher</button></noscript>
   </form>
 
-  {{ planning_legend(start, end, reserved, has_current) }}
-  {{ planning_table(months, editable=True) }}
+  {{ planning_legend(start, end, reserved, has_current, pending=pending) }}
+  {{ planning_table(months, 'edit', url_for('planning.save_slot'),
+                    url_for('planning.planning_state', year=year.id)) }}
 
-  <!-- ---------------- Partage en lecture seule ---------------- -->
-  <details class="tool" id="tools-share"{% if share %} open{% endif %}>
+  <!-- ---------------- Liens de réservation ---------------- -->
+  <details class="tool" id="tools-share"{% if links %} open{% endif %}>
     <summary>🔗 Partager ce planning</summary>
-    <div class="panel" style="max-width:760px;">
-      {% if share %}
-        <p class="help">Ce lien donne accès à vos disponibilités de
-          {{ year.label }} <strong>en lecture seule</strong>, sans compte ni mot
-          de passe. Personne ne peut modifier votre planning, et la page
-          n'affiche ni classe, ni étudiant, ni note.</p>
+    <div class="panel" style="max-width:860px;">
+      <p class="help">Un lien par client : il y consulte vos disponibilités de
+        {{ year.label }} sans compte et coche les demi-journées libres qu'il
+        souhaite réserver. Ses demandes apparaissent sur votre planning dans la
+        couleur du lien ; cochez-les pour les valider (elles passent alors en
+        « Non disponible »). Une demi-journée demandée par un client n'est plus
+        proposée aux autres. La page n'affiche ni classe, ni étudiant, ni note.</p>
+
+      {#- Révélé par le script quand les demandes ont changé depuis l'affichage
+          de la page (nouvelle demande d'un client, validation dans la grille). -#}
+      <p class="flash success" id="requestsStale" hidden>Les demandes ont changé.
+        <a href="{{ url_for('planning.view_planning', year=year.id, _anchor='tools-share') }}"
+           onclick="location.reload(); return false;">Actualiser la liste</a></p>
+
+      {% for row in links %}
+      {% set link = row.link %}
+      <div class="share-link">
+        <div class="share-link-head">
+          <span class="legend"><span class="key request" style="--req: {{ link.color }}"></span></span>
+          <strong>{{ link.name }}</strong>
+          <span class="muted">{{ row.requests|length }} demande(s) à valider ·
+            {{ row.granted }} validée(s)</span>
+        </div>
         <div class="share-row">
-          <input type="text" id="shareUrl" readonly
-                 value="{{ url_for('planning.public_planning', token=share.token, _external=True) }}">
-          <button class="btn secondary small" type="button" data-copy="#shareUrl">Copier</button>
+          <input type="text" id="shareUrl{{ link.id }}" readonly
+                 value="{{ url_for('planning.public_planning', token=link.token, _external=True) }}">
+          <button class="btn secondary small" type="button" data-copy="#shareUrl{{ link.id }}">Copier</button>
           <a class="btn secondary small" target="_blank" rel="noopener"
-             href="{{ url_for('planning.public_planning', token=share.token) }}">Ouvrir ↗</a>
-        </div>
-        <div class="inline-form" style="margin-top:12px;">
-          <form method="post" action="{{ url_for('planning.share_link') }}"
-                onsubmit="return confirm('Régénérer le lien ? L\'ancien cessera de fonctionner.');">
+             href="{{ url_for('planning.public_planning', token=link.token) }}">Ouvrir ↗</a>
+          <form method="post" action="{{ url_for('planning.revoke_link', link_id=link.id) }}"
+                onsubmit="return confirm('Supprimer ce lien ? Son adresse cessera de fonctionner et ses demandes en attente seront libérées. Les demi-journées déjà validées restent réservées.');">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="year" value="{{ year.id }}">
-            <button class="btn secondary small" type="submit">Régénérer le lien</button>
-          </form>
-          <form method="post" action="{{ url_for('planning.revoke_link') }}"
-                onsubmit="return confirm('Supprimer le lien de partage ?');">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="year" value="{{ year.id }}">
-            <button class="btn danger small" type="submit">Supprimer le lien</button>
+            <button class="btn danger small" type="submit">Supprimer</button>
           </form>
         </div>
-      {% else %}
-        <p class="help">Créez un lien public pour communiquer vos
-          disponibilités de {{ year.label }} à l'extérieur. Les personnes qui le
-          reçoivent consultent le planning sans pouvoir le modifier.</p>
-        <form method="post" action="{{ url_for('planning.share_link') }}">
+        {% if row.requests %}
+        <ul class="requests">
+          {% for slot in row.requests %}
+          <li>
+            <span>{{ day_label(slot.date) }} {{ slot.date.year }} · {{ half_labels[slot.half] }}</span>
+            <form method="post" action="{{ url_for('planning.answer_requests', link_id=link.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="date" value="{{ slot.date.isoformat() }}">
+              <input type="hidden" name="half" value="{{ slot.half }}">
+              <button class="btn small" type="submit" name="action" value="accept">Valider</button>
+              <button class="btn secondary small" type="submit" name="action" value="refuse">Refuser</button>
+            </form>
+          </li>
+          {% endfor %}
+        </ul>
+        {% if row.requests|length > 1 %}
+        <form method="post" action="{{ url_for('planning.answer_requests', link_id=link.id) }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <input type="hidden" name="year" value="{{ year.id }}">
-          <button class="btn" type="submit">Créer le lien de partage</button>
+          <button class="btn small" type="submit" name="action" value="accept">Tout valider</button>
+          <button class="btn secondary small" type="submit" name="action" value="refuse"
+                  onclick="return confirm('Refuser toutes les demandes de ce lien ?');">Tout refuser</button>
         </form>
-      {% endif %}
+        {% endif %}
+        {% endif %}
+      </div>
+      {% endfor %}
+
+      <form method="post" action="{{ url_for('planning.share_link') }}" class="inline-form share-new">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="year" value="{{ year.id }}">
+        <div>
+          <label for="linkName">Nom du lien</label>
+          <input type="text" id="linkName" name="name" maxlength="80" required
+                 placeholder="ex. Formation STEAME">
+        </div>
+        <div style="flex:0 0 auto; min-width:0;">
+          <label for="linkColor">Couleur des demandes</label>
+          <input type="color" id="linkColor" name="color" value="{{ next_color }}">
+        </div>
+        <button class="btn" type="submit">Créer le lien</button>
+      </form>
     </div>
   </details>
 {% endif %}

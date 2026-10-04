@@ -99,9 +99,13 @@ finales restent saisies à la main par l'enseignant.
   ligne par semaine du lundi au vendredi, chaque journée en deux demi-journées.
 - **Cocher une demi-journée** la réserve pour les cours : elle passe en
   « Non disponible ». Enregistrement immédiat, compteurs par semaine et par année.
-- **Partage par lien externe** en lecture seule : les personnes qui le reçoivent
-  consultent les disponibilités sans compte et sans pouvoir rien modifier. Le lien
-  est régénérable (ce qui invalide le précédent) et supprimable.
+- **Liens de réservation** : un lien par client, avec un nom (ex. « Formation
+  STEAME ») et une couleur. Sans compte, le client y consulte les disponibilités
+  et coche les demi-journées libres qu'il souhaite réserver. Ses demandes
+  apparaissent sur le planning dans la couleur du lien ; l'enseignant les valide
+  (elles passent en « Non disponible ») ou les refuse. Une demi-journée demandée
+  est aussitôt fermée aux autres clients, et les pages se mettent à jour en
+  direct. Chaque lien est supprimable.
 
 ## Démarrage local
 
@@ -144,7 +148,7 @@ astranote/
   auth.py              Login / logout / mon compte / comptes enseignants
   main.py              Structure, étudiants, recherche, dashboard, administration
   modules.py           Grille, dates, colonnes, groupes, saisie AJAX, Excel
-  planning.py          Planning de l'année, demi-journées et lien de partage
+  planning.py          Planning de l'année, demi-journées et liens de réservation
   templates/           Jinja2
   static/              CSS + JS de la grille et du planning
 ```

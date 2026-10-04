@@ -1,23 +1,28 @@
-{#- Tableau de planning, partagé par la vue de l'enseignant et le lien public.
+{#- Tableau de planning, partagé par la vue de l'enseignant et la page d'un
+    lien de réservation.
 
-    `editable` décide de la présence des cases à cocher : le lien public rend
-    exactement la même grille, en lecture seule. Une seule source pour les deux
-    évite qu'elles divergent au fil des retouches.
+    `mode` décide de ce qu'une case à cocher signifie : « edit » pour
+    l'enseignant (réserver, libérer, valider une demande), « book » pour un
+    client (demander une demi-journée libre, retirer sa demande). Une seule
+    source pour les deux évite qu'elles divergent au fil des retouches.
 
     À importer avec `with context` : les libellés de jours viennent du
     processeur de contexte du blueprint. -#}
 
-{% macro planning_table(months, editable=False) %}
+{% macro planning_table(months, mode, save_url, state_url, color=None) %}
+{% set book = mode == 'book' %}
 <div class="planning-wrap">
-  <table class="planning"{% if editable %} id="planning"
-         data-save-slot="{{ url_for('planning.save_slot') }}"{% endif %}>
+  <table class="planning" id="planning" data-mode="{{ mode }}"
+         data-save-slot="{{ save_url }}" data-state="{{ state_url }}"
+         data-free-text="{{ slot_texts.free }}" data-on-text="{{ slot_texts[mode] }}"
+         {%- if color %} data-color="{{ color }}"{% endif %}>
     <thead>
       <tr>
         <th class="week" rowspan="2">Semaine</th>
         {% for day in week_days %}
           <th class="day" colspan="2">{{ day }}</th>
         {% endfor %}
-        <th class="count" rowspan="2" title="Demi-journées réservées dans la semaine">Rés.</th>
+        <th class="count" rowspan="2" title="{{ 'Vos demi-journées demandées dans la semaine' if book else 'Demi-journées réservées dans la semaine' }}">{{ 'Dem.' if book else 'Rés.' }}</th>
       </tr>
       <tr>
         {% for day in week_days %}
@@ -37,16 +42,25 @@
         <th class="week">S{{ week.iso }}<span class="week-dates">{{ week.label }}</span></th>
         {% for day in week.days %}
           {% for half in halves %}
-            {% set on = day[half] %}
-            <td class="slot{{ ' busy' if on else '' }}{{ ' out' if not day.in_year else '' }}"
+            {% set cell = day.cells[half] %}
+            {% set free = cell.state == 'free' %}
+            {#- Un client ne réserve pas dans le passé : la case libre d'un
+                jour écoulé est inerte. -#}
+            {% set past = book and day.is_past and free %}
+            <td class="slot{{ '' if free else ' ' ~ cell.state }}{{ ' out' if not day.in_year else '' }}{{ ' past' if past and day.in_year else '' }}"
                 {%- if day.in_year %} data-date="{{ day.date.isoformat() }}" data-half="{{ half }}"
-                title="{{ day.label }} · {{ half_labels[half] }} — {{ 'Non disponible' if on else 'Disponible' }}"
+                data-state="{{ cell.state }}" data-label="{{ day.label }} · {{ half_labels[half] }}"
+                {%- if cell.color %} style="--req: {{ cell.color }}"{% endif %}
+                title="{{ day.label }} · {{ half_labels[half] }} — {{ 'Date passée' if past else cell.text }}"
                 {%- else %} title="Hors de l'année académique"{% endif %}>
-              {% if day.in_year and editable %}
-                <input type="checkbox" class="slot-box" {{ 'checked' if on }}
+              {% if day.in_year %}
+                {% if not past %}
+                <input type="checkbox" class="slot-box"
+                       {{- ' checked' if cell.state == ('request' if book else 'busy') }}
+                       {{- ' disabled' if book and cell.state in ('busy', 'granted') }}
                        aria-label="{{ day.label }} · {{ half_labels[half] }}">
-              {% elif day.in_year %}
-                <span class="sr-only">{{ 'Non disponible' if on else 'Disponible' }}</span>
+                {% endif %}
+                {% if book %}<span class="sr-only">{{ cell.text }}</span>{% endif %}
               {% endif %}
             </td>
           {% endfor %}
@@ -62,13 +76,26 @@
 
 {#- Bandeau commun : période couverte, compteur, légende et saut à la semaine
     en cours (une année tient sur ~52 lignes : y arriver à la main est pénible). -#}
-{% macro planning_legend(start, end, reserved, has_current=False) %}
+{% macro planning_legend(start, end, reserved, has_current=False, mode='edit', pending=0, color=None) %}
 <div class="planning-bar">
   <span class="muted">Du {{ start.strftime('%d/%m/%Y') }} au {{ end.strftime('%d/%m/%Y') }}</span>
+  {% if mode == 'book' %}
+  <span class="planning-total"><strong id="reservedTotal">{{ reserved }}</strong>
+    demi-journée(s) demandée(s)</span>
+  {% else %}
   <span class="planning-total"><strong id="reservedTotal">{{ reserved }}</strong>
     demi-journée(s) réservée(s)</span>
+  <span class="planning-total"><strong id="pendingTotal">{{ pending }}</strong>
+    demande(s) à valider</span>
+  {% endif %}
   <span class="spacer"></span>
   <span class="legend"><span class="key busy"></span> Non disponible</span>
+  {% if mode == 'book' %}
+  <span class="legend"><span class="key request" style="--req: {{ color }}"></span> Votre demande</span>
+  <span class="legend"><span class="key request granted" style="--req: {{ color }}"></span> Confirmée</span>
+  {% else %}
+  <span class="legend"><span class="key request"></span> Demande d'un client (couleur du lien)</span>
+  {% endif %}
   <span class="legend"><span class="key free"></span> Disponible</span>
   <span class="legend"><span class="key out"></span> Hors année</span>
   {#- Le saut n'a de cible que si l'année affichée contient aujourd'hui. -#}

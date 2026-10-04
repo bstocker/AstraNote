@@ -228,7 +228,11 @@ Le contenu d'une cellule (étoiles ↔ statut) est **modifiable à tout moment**
 - **Cocher une demi-journée** la réserve pour les cours : elle passe en **« Non disponible »** (rouge). Tout le reste est réputé disponible. L'enregistrement est immédiat (AJAX), sans bouton à valider.
 - Compteur des demi-journées réservées, par semaine et sur l'année.
 - Le planning est **propre à chaque enseignant** : personne ne voit ni ne modifie celui d'un autre.
-- **Partage par lien externe** : un lien public par année, **en lecture seule**, consultable **sans compte**. Il n'expose que le nom de l'enseignant, l'année et les demi-journées occupées — aucune classe, aucun étudiant, aucune note. Le lien est **régénérable** (l'ancien cesse alors de fonctionner) et **supprimable**. La page porte `noindex` : un lien diffusé par message n'a pas à être indexé.
+- **Liens de réservation** : l'enseignant crée autant de liens publics qu'il a de clients, chacun avec un **nom** (ex. « Formation STEAME ») et une **couleur**. Le lien s'ouvre **sans compte** sur l'année concernée et n'expose que le nom de l'enseignant, l'année, les demi-journées occupées et les demandes du client lui-même — aucune classe, aucun étudiant, aucune note, ni le nom des autres clients. La page porte `noindex` : un lien diffusé par message n'a pas à être indexé.
+- Le client **coche les demi-journées libres** (à venir) qu'il souhaite réserver : sa **demande** est enregistrée aussitôt, et il peut la retirer tant qu'elle n'est pas validée. Une fois validée, elle lui apparaît comme **confirmée** et ne se retire plus depuis le lien.
+- Côté enseignant, les demandes apparaissent dans la grille **dans la couleur du lien**, avec le nom du client en infobulle, et sont listées sous la grille. **Cocher** une demande la **valide** : la cellule prend la couleur habituelle « Non disponible ». La liste permet aussi de **refuser** (la demi-journée est libérée), une par une ou toutes d'un coup.
+- **Disponibilités en temps réel** : une demi-journée demandée est immédiatement fermée aux autres clients (le premier arrivé l'emporte, le second reçoit un message) ; les pages ouvertes — celle de l'enseignant comme celles des clients — se rafraîchissent toutes seules, environ toutes les 10 secondes.
+- Un lien est **supprimable** : son adresse cesse de fonctionner, ses demandes en attente sont libérées, les demi-journées déjà validées restent réservées.
 
 ---
 
@@ -262,8 +266,8 @@ Star(id, subject_type, subject_id, star_column_id, value)     # subject = studen
 UrlValue(id, subject_type, subject_id, url_column_id, url)     # lien par étudiant/groupe
 NoteValue(id, subject_type, subject_id, note_column_id, score) # note manuelle /20
 GroupComment(id, group_id, comment)                  # commentaire général du groupe
-PlanningSlot(id, teacher_id, date, half)             # demi-journée réservée (half = am | pm) ; pas de ligne = disponible
-PlanningShare(id, teacher_id, academic_year_id, token, created_at)  # lien public de consultation du planning
+PlanningSlot(id, teacher_id, date, half, link_id, pending)  # demi-journée réservée (half = am | pm) ; pas de ligne = disponible ; pending = demande d'un client à valider
+PlanningLink(id, teacher_id, academic_year_id, token, name, color, created_at)  # lien de réservation remis à un client
 ```
 
 L'**unité notée** (`subject`) est l'étudiant en mode individuel, le groupe en mode groupe : `Star` et `NoteValue` référencent l'un ou l'autre selon le `work_mode` du module. La note d'étoiles est **dérivée** (calculée à la volée) et non stockée en dur ; les notes manuelles sont stockées telles quelles.
