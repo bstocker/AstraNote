@@ -15,7 +15,7 @@
     <p class="muted">
       {{ r.student.email or '—' }}
       {% if r.student.discord_alias %} · Discord : {{ r.student.discord_alias }}{% endif %}
-      {% if r.student.github_url %} · <a href="{{ r.student.github_url }}" target="_blank" rel="noopener">GitHub ↗</a>{% endif %}
+      {% if r.student.github_url|safe_url %} · <a href="{{ r.student.github_url|safe_url }}" target="_blank" rel="noopener">GitHub ↗</a>{% endif %}
     </p>
     <table class="list-table">
       <thead><tr><th>École</th><th>Année</th><th>Classe</th><th>Modules</th></tr></thead>

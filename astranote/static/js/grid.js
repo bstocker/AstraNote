@@ -322,6 +322,7 @@
     const showAllBtn = document.getElementById("showAllDates");
     const selectAllBtn = document.getElementById("selectAllDates");
     const status = document.getElementById("filterStatus");
+    const exportBtn = document.getElementById("exportGrid");
     // La sélection survit au rechargement qui suit un POST (ajout de colonne,
     // renommage…) : la reperdre à chaque enregistrement la rendrait inutile.
     const KEY = nav.dataset.selectKey;
@@ -346,6 +347,15 @@
       });
       if (showSelBtn) showSelBtn.disabled = selected.size === 0;
       if (showAllBtn) showAllBtn.hidden = !filtering;
+      // L'export suit la sélection : les séances retenues, ou tout le module
+      // si aucune ne l'est.
+      if (exportBtn) {
+        const query = Array.from(selected).map((id) => "dates=" + id).join("&");
+        exportBtn.href = exportBtn.dataset.base + (query ? "?" + query : "");
+        exportBtn.textContent = selected.size
+          ? `⬇ Exporter la sélection (${selected.size}) (.xlsx)`
+          : "⬇ Exporter la grille (.xlsx)";
+      }
       if (selectAllBtn) {
         const all = selected.size === pickers.length && pickers.length > 0;
         selectAllBtn.textContent = all ? "Tout désélectionner" : "Tout sélectionner";

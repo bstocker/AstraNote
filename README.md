@@ -51,6 +51,11 @@ finales restent saisies à la main par l'enseignant.
   Retard et Pas de PC en orange.
 - Bouton **Synthèse** : export Excel du nombre d'étudiants par élément des
   colonnes Présence et Étoiles, pour la dernière séance ou une sélection.
+- Bouton **Exporter la grille** : export Excel de la zone de notation telle
+  qu'elle est affichée — les séances sélectionnées, ou toutes si aucune ne
+  l'est. Colonne A le groupe, colonne B l'étudiant (groupes toujours
+  dépliés), puis les colonnes de chaque séance sous son intitulé. Le fichier
+  porte la date de la séance, l'école et le nom du module.
 - Calcul automatique de la **note /20 au prorata** (règles R1–R12).
 - **Couleur de fond** libre sur la cellule d'un étudiant ou d'un groupe, propre à
   chaque module.
@@ -124,7 +129,7 @@ console** (email `admin@astranote.local`, mot de passe généré).
 
 | Variable | Rôle | Défaut |
 |---|---|---|
-| `ASTRANOTE_SECRET_KEY` | Clé de session Flask (à définir en prod) | `dev-secret-change-me` |
+| `ASTRANOTE_SECRET_KEY` | Clé de session Flask | générée au premier démarrage et conservée dans `instance/secret_key` |
 | `ASTRANOTE_DATABASE_URI` | URI SQLAlchemy | `sqlite:///instance/astranote.db` |
 | `ASTRANOTE_ADMIN_EMAIL` | Email de l'admin initial | `admin@astranote.local` |
 | `ASTRANOTE_ADMIN_PASSWORD` | Mot de passe admin initial | généré aléatoirement |
@@ -183,8 +188,10 @@ webapp. Il **exclut** la base SQLite et le dossier `instance/` pour ne pas
 
 Secrets GitHub requis : `PA_USERNAME`, `PA_TOKEN`, `PA_TARGET_DIR`,
 `PA_WEBAPP_DOMAIN` (et `PA_HOST` si compte EU). Sur PythonAnywhere, pointez le
-fichier WSGI vers `wsgi.py` (variable `application`) et définissez
-`ASTRANOTE_SECRET_KEY`.
+fichier WSGI vers `wsgi.py` (variable `application`). `ASTRANOTE_SECRET_KEY`
+est facultative : à défaut, une clé propre à l'installation est générée dans
+`instance/secret_key` (fichier à ne pas supprimer, sous peine de déconnecter
+tout le monde).
 
 > ⚠️ Le déploiement copie les fichiers mais **n'installe pas** les dépendances.
 > Après un changement de `requirements.txt` (ex. ajout de Flask-WTF), lancez une

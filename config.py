@@ -11,7 +11,11 @@ INSTANCE_DIR = os.path.join(BASE_DIR, "instance")
 
 
 class Config:
-    SECRET_KEY = os.environ.get("ASTRANOTE_SECRET_KEY", "dev-secret-change-me")
+    # Aucune valeur par défaut : une clé connue du dépôt permettrait à
+    # n'importe qui de forger un cookie de session. Si la variable manque,
+    # l'application en génère une et la conserve dans instance/ (cf.
+    # `_persistent_secret_key`).
+    SECRET_KEY = os.environ.get("ASTRANOTE_SECRET_KEY")
 
     # Base SQLite (fichier unique, simple à sauvegarder — cf. fiche §7).
     SQLALCHEMY_DATABASE_URI = os.environ.get(

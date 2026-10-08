@@ -25,11 +25,43 @@ def load_user(user_id):
     return db.session.get(Teacher, int(user_id))
 
 
+# Ancienne valeur par défaut, publique dans l'historique du dépôt : traitée
+# comme une clé absente, où qu'elle ait été recopiée.
+LEGACY_SECRET_KEY = "dev-secret-change-me"
+
+
+def _persistent_secret_key(instance_dir):
+    """Clé de session propre à cette installation, générée au premier besoin.
+
+    Sert quand ASTRANOTE_SECRET_KEY n'est pas définie. La clé est tirée au
+    hasard puis conservée dans `instance/secret_key` — dossier jamais versionné
+    ni écrasé par le déploiement — pour que les sessions survivent aux
+    redémarrages. Création exclusive : si deux processus démarrent ensemble,
+    le second relit la clé du premier au lieu d'en écrire une autre.
+    """
+    path = os.path.join(instance_dir, "secret_key")
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        with open(path, encoding="ascii") as f:
+            key = f.read().strip()
+        if key:
+            return key
+        # Fichier vide (écriture interrompue) : on le remplit.
+        fd = os.open(path, os.O_WRONLY | os.O_TRUNC, 0o600)
+    key = secrets.token_hex(32)
+    with os.fdopen(fd, "w", encoding="ascii") as f:
+        f.write(key)
+    return key
+
+
 def create_app(config_object=Config):
     app = Flask(__name__)
     app.config.from_object(config_object)
 
     os.makedirs(INSTANCE_DIR, exist_ok=True)
+    if app.config.get("SECRET_KEY") in (None, "", LEGACY_SECRET_KEY):
+        app.config["SECRET_KEY"] = _persistent_secret_key(INSTANCE_DIR)
 
     db.init_app(app)
     login_manager.init_app(app)
@@ -59,6 +91,19 @@ def create_app(config_object=Config):
     @app.template_filter("stars_display")
     def stars_display(value):
         return grading.display_token(value)
+
+    @app.template_filter("safe_url")
+    def safe_url(value):
+        """Lien affichable dans un `href`, ou chaîne vide s'il est douteux.
+
+        Les liens sont contrôlés à la saisie ; ce filtre couvre ceux qui ont
+        été enregistrés avant ce contrôle.
+        """
+        from .main import clean_url
+        try:
+            return clean_url(value) or ""
+        except ValueError:
+            return ""
 
     @app.template_filter("hours")
     def hours(value):
@@ -146,6 +191,17 @@ def _run_migrations(app):
         db.session.commit()
         app.logger.warning(
             "Migration : %s lien(s) de partage repris dans planning_link.", moved)
+
+    # Réparation : étudiants sans aucune inscription. Avant
+    # `purge_orphan_students`, supprimer une classe laissait leurs fiches en
+    # base. Placée avant la réparation suivante, qui balaie leurs affectations.
+    if "student" in inspector.get_table_names():
+        from .main import purge_orphan_students
+        removed = purge_orphan_students()
+        db.session.commit()
+        if removed:
+            app.logger.warning(
+                "Migration : %s étudiant(s) sans inscription supprimé(s).", removed)
 
     # Réparation : affectations de groupe pointant vers un étudiant supprimé.
     # Avant la cascade `Student.group_memberships`, retirer un étudiant de sa

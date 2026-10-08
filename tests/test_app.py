@@ -2030,3 +2030,273 @@ def test_move_date_only_reorders_same_day_sessions(app, admin):
     with app.app_context():
         order = [g.label for g in module_dates_sorted(db.session.get(Module, mid))]
     assert order == ["Après-midi", "Matin", "Octobre"]
+
+
+# --------------------------------------------------------------------------- #
+# Liens saisis : http(s) uniquement
+# --------------------------------------------------------------------------- #
+JS_LINK = "javascript:alert(1)"
+
+
+def test_student_github_link_must_be_http(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    admin.post(f"/classes/{cid}/students",
+               data={"full_name": "Zed", "github_url": JS_LINK})
+    admin.post(f"/enrollments/{enr['Alice']}/student",
+               data={"full_name": "Alice", "github_url": JS_LINK})
+    admin.post(f"/enrollments/{enr['Bob']}/student",
+               data={"full_name": "Bob", "github_url": "https://github.com/bob"})
+    with app.app_context():
+        assert Student.query.filter_by(full_name="Zed").first() is None
+        assert db.session.get(Student, ids["Alice"]).github_url is None
+        assert db.session.get(Student, ids["Bob"]).github_url == "https://github.com/bob"
+
+
+def test_module_discord_link_must_be_http(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    admin.post(f"/modules/{mid}/edit", data={"name": "Crypto", "discord_url": JS_LINK})
+    admin.post(f"/classes/{cid}/modules/new",
+               data={"name": "Piégé", "discord_ref_url": JS_LINK})
+    with app.app_context():
+        assert db.session.get(Module, mid).discord_url is None
+        assert Module.query.filter_by(name="Piégé").first() is None
+
+
+def test_url_cell_must_be_http(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    did, _ = add_star_column(app, admin, mid)
+    admin.post(f"/dates/{did}/url-columns", data={"title": "Dépôt"})
+    with app.app_context():
+        ucid = UrlColumn.query.first().id
+    payload = {"subject_id": ids["Alice"], "column_id": ucid}
+    assert admin.post(f"/modules/{mid}/save-url",
+                      json={**payload, "value": JS_LINK}).status_code == 400
+    assert admin.post(f"/modules/{mid}/save-url",
+                      json={**payload, "value": "https://ex.fr/a"}).status_code == 200
+    with app.app_context():
+        assert [u.url for u in UrlValue.query.all()] == ["https://ex.fr/a"]
+
+
+def test_stored_unsafe_links_are_not_rendered(app, admin):
+    """Liens enregistrés avant le contrôle : jamais rendus dans un href."""
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    did, _ = add_star_column(app, admin, mid)
+    admin.post(f"/dates/{did}/url-columns", data={"title": "Dépôt"})
+    with app.app_context():
+        db.session.get(Module, mid).discord_url = JS_LINK
+        db.session.get(Student, ids["Alice"]).github_url = JS_LINK
+        db.session.add(UrlValue(subject_type="student", subject_id=ids["Alice"],
+                                url_column_id=UrlColumn.query.first().id, url=JS_LINK))
+        db.session.commit()
+    assert b'href="javascript:' not in admin.get(f"/modules/{mid}").data
+    assert b'href="javascript:' not in admin.get("/search?q=alice").data
+
+
+def test_student_import_ignores_unsafe_link(app, admin):
+    from openpyxl import Workbook
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    wb = Workbook()
+    wb.active.append(["Nom complet", "Lien GitHub"])
+    wb.active.append(["Alice", JS_LINK])
+    wb.active.append(["Bob", "https://github.com/bob"])
+    bio = BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+    admin.post(f"/classes/{cid}/students/import",
+               data={"file": (bio, "liste.xlsx")}, content_type="multipart/form-data")
+    with app.app_context():
+        assert db.session.get(Student, ids["Alice"]).github_url is None
+        assert db.session.get(Student, ids["Bob"]).github_url == "https://github.com/bob"
+
+
+# --------------------------------------------------------------------------- #
+# Clé de session
+# --------------------------------------------------------------------------- #
+def test_secret_key_generated_once_and_kept(tmp_path):
+    from astranote import _persistent_secret_key
+    key = _persistent_secret_key(str(tmp_path))
+    assert len(key) == 64
+    assert _persistent_secret_key(str(tmp_path)) == key
+    assert (tmp_path / "secret_key").read_text() == key
+
+
+def test_missing_or_legacy_secret_key_is_replaced(tmp_path, monkeypatch):
+    import astranote
+    monkeypatch.setattr(astranote, "INSTANCE_DIR", str(tmp_path))
+    for value in (None, "dev-secret-change-me"):
+        class NoKey(TestConfig):
+            SECRET_KEY = value
+        key = create_app(NoKey).config["SECRET_KEY"]
+        assert key == (tmp_path / "secret_key").read_text()
+        assert key != "dev-secret-change-me"
+
+
+# --------------------------------------------------------------------------- #
+# Étudiants sans inscription
+# --------------------------------------------------------------------------- #
+def test_delete_class_removes_its_students(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    admin.post(f"/classes/{cid}/delete")
+    with app.app_context():
+        assert Student.query.count() == 0
+        assert Enrollment.query.count() == 0
+
+
+def test_delete_class_keeps_students_enrolled_elsewhere(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    with app.app_context():
+        k = db.session.get(Class, cid)
+        other = Class(name="B4", school_id=k.school_id,
+                      academic_year_id=k.academic_year_id, teacher_id=1)
+        db.session.add(other)
+        db.session.flush()
+        db.session.add(Enrollment(student_id=ids["Alice"], class_id=other.id))
+        db.session.commit()
+    admin.post(f"/classes/{cid}/delete")
+    with app.app_context():
+        assert [s.full_name for s in Student.query.all()] == ["Alice"]
+
+
+def test_delete_school_and_year_remove_students(app, admin):
+    for target in ("schools", "years"):
+        cid, mid, ids, enr = bootstrap_class(app, admin)
+        with app.app_context():
+            k = db.session.get(Class, cid)
+            tid = k.school_id if target == "schools" else k.academic_year_id
+        admin.post(f"/{target}/{tid}/delete")
+        with app.app_context():
+            assert Class.query.count() == 0
+            assert Student.query.count() == 0
+            School.query.delete()
+            AcademicYear.query.delete()
+            db.session.commit()
+
+
+def test_startup_repairs_students_without_enrollment(app, admin):
+    from astranote import _run_migrations
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    with app.app_context():
+        db.session.add(Student(full_name="Fantôme"))
+        db.session.commit()
+        _run_migrations(app)
+        assert sorted(s.full_name for s in Student.query.all()) == ["Alice", "Bob", "Chloe"]
+
+
+# --------------------------------------------------------------------------- #
+# Export Excel de la grille affichée
+# --------------------------------------------------------------------------- #
+def _grid_export(admin, mid, dates=()):
+    query = "&".join(f"dates={d}" for d in dates)
+    r = admin.get(f"/modules/{mid}/grid.xlsx" + (f"?{query}" if query else ""))
+    assert r.status_code == 200
+    return r, load_workbook(BytesIO(r.data)).active
+
+
+def _two_sessions(app, admin, mid):
+    """Deux séances ; la première porte présence, étoiles, lien et remarque."""
+    admin.post(f"/modules/{mid}/dates", data={"date": "2025-09-30", "label": "TP1"})
+    admin.post(f"/modules/{mid}/dates", data={"date": "2025-10-14"})
+    with app.app_context():
+        d1 = GradeDate.query.filter_by(label="TP1").first().id
+        d2 = GradeDate.query.filter(GradeDate.id != d1).first().id
+    admin.post(f"/dates/{d1}/presence-columns", data={"title": "Appel"})
+    admin.post(f"/dates/{d1}/star-columns", data={"title": "Exo 1"})
+    admin.post(f"/dates/{d1}/url-columns", data={"title": "Dépôt"})
+    admin.post(f"/dates/{d1}/text-columns", data={"title": "Remarque"})
+    admin.post(f"/dates/{d2}/star-columns", data={"title": "Exo 2"})
+    with app.app_context():
+        cols = {
+            "presence": PresenceColumn.query.first().id,
+            "star1": StarColumn.query.filter_by(grade_date_id=d1).first().id,
+            "star2": StarColumn.query.filter_by(grade_date_id=d2).first().id,
+            "url": UrlColumn.query.first().id,
+            "text": TextColumn.query.first().id,
+        }
+    return d1, d2, cols
+
+
+def test_grid_export_individual_all_sessions(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    d1, d2, cols = _two_sessions(app, admin, mid)
+    admin.post(f"/modules/{mid}/note-columns", data={"title": "Note CC"})
+    with app.app_context():
+        ncid = NoteColumn.query.first().id
+    alice = {"subject_id": ids["Alice"]}
+    admin.post(f"/modules/{mid}/save-presence",
+               json={**alice, "column_id": cols["presence"], "value": "Absent"})
+    admin.post(f"/modules/{mid}/save-star", json={**alice, "column_id": cols["star1"], "value": "3"})
+    admin.post(f"/modules/{mid}/save-star", json={**alice, "column_id": cols["star2"], "value": "Retard"})
+    admin.post(f"/modules/{mid}/save-url",
+               json={**alice, "column_id": cols["url"], "value": "https://ex.fr/a"})
+    admin.post(f"/modules/{mid}/save-text",
+               json={**alice, "column_id": cols["text"], "value": "Seule"})
+    admin.post(f"/modules/{mid}/save-note", json={**alice, "column_id": ncid, "value": "15"})
+    admin.post(f"/modules/{mid}/save-comment", json={**alice, "value": "Bien"})
+    admin.post(f"/enrollments/{enr['Chloe']}/toggle-active")   # neutralisée : absente
+
+    r, ws = _grid_export(admin, mid)
+    assert "2025-09-30_au_2025-10-14_EPSI_Crypto.xlsx" in r.headers["Content-Disposition"]
+    assert [c.value for c in ws[2]] == [
+        "Étudiant", "30/09/2025 · TP1", None, None, None, "14/10/2025",
+        "Total ★", "Note /20", "Note CC", "Commentaire"]
+    assert [c.value for c in ws[3]][1:6] == ["Appel", "Exo 1", "Dépôt", "Remarque", "Exo 2"]
+    assert "B2:E2" in [str(m) for m in ws.merged_cells.ranges]
+    assert [c.value for c in ws[4]] == [
+        "Alice", "Absent", "★★★", "https://ex.fr/a", "Seule", "Retard",
+        3, 20, 15, "Bien"]
+    assert [c.value for c in ws[5]][:3] == ["Bob", None, "—"]
+    assert ws.max_row == 5
+
+
+def test_grid_export_selected_session_only(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    d1, d2, cols = _two_sessions(app, admin, mid)
+    admin.post(f"/modules/{mid}/save-star",
+               json={"subject_id": ids["Alice"], "column_id": cols["star1"], "value": "3"})
+    r, ws = _grid_export(admin, mid, dates=[d2, "x", 9999])
+    assert "2025-10-14_EPSI_Crypto.xlsx" in r.headers["Content-Disposition"]
+    assert "_au_" not in r.headers["Content-Disposition"]
+    assert [c.value for c in ws[2]] == [
+        "Étudiant", "14/10/2025", "Total ★", "Note /20", "Commentaire"]
+    assert [c.value for c in ws[3]][1] == "Exo 2"
+    # Le total reste celui du module entier, comme à l'écran.
+    assert [c.value for c in ws[4]] == ["Alice", "—", 3, 20, None]
+
+
+def test_grid_export_groups_always_unfolded(app, admin):
+    cid, mid, ids, enr = bootstrap_class(app, admin, work_mode="group")
+    d1, d2, cols = _two_sessions(app, admin, mid)
+    admin.post(f"/modules/{mid}/groups", data={"name": "Équipe A"})
+    with app.app_context():
+        gid = Group.query.first().id
+    for name in ("Bob", "Alice"):
+        admin.post(f"/groups/{gid}/members", data={"student_id": ids[name]})
+    admin.post(f"/modules/{mid}/save-star", json={
+        "subject_type": "group", "subject_id": gid, "column_id": cols["star1"], "value": "4"})
+    admin.post(f"/modules/{mid}/save-star", json={
+        "subject_type": "student", "subject_id": ids["Bob"],
+        "column_id": cols["star1"], "value": "2"})
+    admin.post(f"/modules/{mid}/save-presence", json={
+        "subject_type": "student", "subject_id": ids["Bob"],
+        "column_id": cols["presence"], "value": "Présent"})
+
+    r, ws = _grid_export(admin, mid, dates=[d1])
+    assert "2025-09-30_EPSI_Crypto.xlsx" in r.headers["Content-Disposition"]
+    assert [c.value for c in ws[2]][:3] == ["Groupe", "Étudiant", "30/09/2025 · TP1"]
+    rows = [[c.value for c in row] for row in ws.iter_rows(min_row=4)]
+    #        groupe      étudiant  appel      exo 1   dépôt remarque total note
+    assert rows == [
+        ["Équipe A", None,    None,      "★★★★", None, None, 4, 20,  None],
+        ["Équipe A", "Alice", None,      "—",    None, None, 0, "—", None],
+        ["Équipe A", "Bob",   "Présent", "★★",   None, None, 2, "—", None],
+    ]
+
+
+def test_grid_export_respects_access_and_button(app, admin, client):
+    cid, mid, ids, enr = bootstrap_class(app, admin)
+    add_star_column(app, admin, mid)
+    assert f"/modules/{mid}/grid.xlsx".encode() in admin.get(f"/modules/{mid}").data
+    admin.get("/logout")
+    make_teacher(app, "Autre", "autre@x.fr")
+    login(client, "autre@x.fr")
+    assert client.get(f"/modules/{mid}/grid.xlsx").status_code == 403

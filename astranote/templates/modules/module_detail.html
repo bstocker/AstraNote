@@ -16,11 +16,11 @@
     </h1>
     <p class="muted">
       {{ klass.school.name }} · {{ klass.academic_year.label }}
-      {% if module.discord_url %} ·
-        <a href="{{ module.discord_url }}" target="_blank" rel="noopener">💬 Discord ↗</a>
+      {% if module.discord_url|safe_url %} ·
+        <a href="{{ module.discord_url|safe_url }}" target="_blank" rel="noopener">💬 Discord ↗</a>
       {% endif %}
-      {% if module.discord_ref_url %} ·
-        <a href="{{ module.discord_ref_url }}" target="_blank" rel="noopener">📌 Discord de référence ↗</a>
+      {% if module.discord_ref_url|safe_url %} ·
+        <a href="{{ module.discord_ref_url|safe_url }}" target="_blank" rel="noopener">📌 Discord de référence ↗</a>
       {% endif %}
     </p>
     <p style="margin:4px 0 0;">
@@ -154,6 +154,12 @@
             title="N'afficher dans la zone de notation que les séances sélectionnées">👁 Afficher la sélection</button>
     <button type="button" class="btn secondary small" id="showAllDates" hidden
             title="Revenir à l'affichage de toutes les séances">Afficher toutes les séances</button>
+    {#- Export de la zone de notation : grid.js ajoute au lien les séances
+        sélectionnées. Sans sélection (ou sans script), tout est exporté. -#}
+    <a class="btn secondary small" id="exportGrid"
+       href="{{ url_for('modules.export_grid', module_id=module.id) }}"
+       data-base="{{ url_for('modules.export_grid', module_id=module.id) }}"
+       title="Exporter en Excel la zone de notation, groupes dépliés">⬇ Exporter la grille (.xlsx)</a>
   </div>
   {#- Quand un filtre est actif, la grille ne montre plus tout : le dire, sinon
       une séance manquante passe pour une séance perdue. -#}
@@ -349,7 +355,7 @@
                 data-subject-type="{{ subj.type }}" data-date="{{ gd.id }}"
                 data-column="{{ uc.id }}">
               <input type="url" class="url-input" value="{{ uval or '' }}" placeholder="https://…" {{ 'disabled' if not subj.active }}>
-              {% if uval %}<a href="{{ uval }}" target="_blank" rel="noopener">↗</a>{% endif %}
+              {% if uval|safe_url %}<a href="{{ uval|safe_url }}" target="_blank" rel="noopener">↗</a>{% endif %}
             </td>
           {% endfor %}
           {% for tc in gd.text_columns %}

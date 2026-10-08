@@ -1,8 +1,8 @@
 """Point d'entrée WSGI pour PythonAnywhere.
 
 Dans l'onglet "Web" de PythonAnywhere, pointez le fichier WSGI vers ce module
-et exposez la variable `application`. Pensez à définir les variables
-d'environnement ASTRANOTE_SECRET_KEY (et éventuellement ASTRANOTE_ADMIN_*).
+et exposez la variable `application`. Les variables d'environnement
+ASTRANOTE_SECRET_KEY et ASTRANOTE_ADMIN_* sont facultatives (cf. README).
 """
 import os
 import sys

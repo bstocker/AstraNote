@@ -5,6 +5,7 @@ l'administrateur voit toute la base.
 """
 import os
 import unicodedata
+from urllib.parse import urlparse
 
 from flask import (
     Blueprint, render_template, redirect, url_for, request, flash, abort,
@@ -65,6 +66,24 @@ def purge_group_memberships(klass, student_id):
             GroupMember.student_id == student_id,
             GroupMember.group_id.in_(group_ids),
         ).delete(synchronize_session=False)
+
+
+def purge_orphan_students():
+    """Supprime les étudiants qui n'ont plus aucune inscription.
+
+    Supprimer une classe (ou, par cascade, son école ou son année) emporte ses
+    inscriptions mais pas les fiches `Student`, qui ne lui sont pas rattachées
+    directement : sans ce passage elles restaient en base, invisibles partout
+    sauf dans les compteurs, avec les données personnelles qu'on croyait
+    effacées. À appeler après la suppression, avant le commit. Retourne le
+    nombre de fiches supprimées.
+    """
+    db.session.flush()
+    orphans = Student.query.filter(~Student.enrollments.any()).all()
+    for student in orphans:
+        purge_subject_data(SUBJECT_STUDENT, student.id)
+        db.session.delete(student)
+    return len(orphans)
 
 
 def _class_column_ids(klass):
@@ -132,6 +151,26 @@ def can_manage_owned(obj):
     entités communes, teacher_id NULL).
     """
     return current_user.is_admin or obj.teacher_id == current_user.id
+
+
+def clean_url(raw):
+    """Lien saisi par l'utilisateur : l'URL nettoyée, ou None si le champ est vide.
+
+    Seuls `http://` et `https://` sont acceptés. Ces liens sont rendus dans un
+    `href` : un « javascript:… » enregistré tel quel s'exécuterait au clic chez
+    quiconque ouvre la page — l'administrateur, qui voit toutes les classes, en
+    premier. Lève ValueError sur tout autre schéma.
+    """
+    url = (raw or "").strip()
+    if not url:
+        return None
+    parsed = urlparse(url)
+    if parsed.scheme.lower() not in ("http", "https") or not parsed.netloc:
+        raise ValueError("lien hors http(s)")
+    return url
+
+
+URL_ERROR = "Lien invalide : il doit commencer par http:// ou https://."
 
 
 def strip_accents(text):
@@ -238,6 +277,7 @@ def delete_school(school_id):
     if not can_manage_owned(school):
         abort(403)
     db.session.delete(school)
+    purge_orphan_students()
     db.session.commit()
     flash("École supprimée.", "success")
     return redirect(url_for("main.schools"))
@@ -306,6 +346,7 @@ def delete_year(year_id):
     if not can_manage_owned(year):
         abort(403)
     db.session.delete(year)
+    purge_orphan_students()
     db.session.commit()
     flash("Année supprimée.", "success")
     return redirect(url_for("main.schools"))
@@ -394,6 +435,7 @@ def update_class_billing(class_id):
 def delete_class(class_id):
     klass = get_class_or_403(class_id)
     db.session.delete(klass)
+    purge_orphan_students()
     db.session.commit()
     flash("Classe supprimée.", "success")
     return redirect(url_for("main.dashboard"))
@@ -413,11 +455,15 @@ def add_student(class_id):
 
     email = request.form.get("email", "").strip()
     discord = request.form.get("discord_alias", "").strip()
-    github = request.form.get("github_url", "").strip()
+    try:
+        github = clean_url(request.form.get("github_url"))
+    except ValueError:
+        flash(URL_ERROR, "error")
+        return redirect(url_for("main.view_class", class_id=class_id))
 
     student = Student(
         full_name=full_name, email=email or None,
-        discord_alias=discord or None, github_url=github or None,
+        discord_alias=discord or None, github_url=github,
     )
     db.session.add(student)
     db.session.flush()
@@ -444,10 +490,16 @@ def edit_student(enrollment_id):
         flash("Le nom de l'étudiant est requis.", "error")
         return redirect(url_for("main.view_class", class_id=enr.class_id))
 
+    try:
+        github = clean_url(request.form.get("github_url"))
+    except ValueError:
+        flash(URL_ERROR, "error")
+        return redirect(url_for("main.view_class", class_id=enr.class_id))
+
     student.full_name = full_name
     student.email = request.form.get("email", "").strip() or None
     student.discord_alias = request.form.get("discord_alias", "").strip() or None
-    student.github_url = request.form.get("github_url", "").strip() or None
+    student.github_url = github
     db.session.commit()
     flash("Étudiant mis à jour.", "success")
     return redirect(url_for("main.view_class", class_id=enr.class_id))
@@ -659,7 +711,7 @@ def import_students(class_id):
         by_name.setdefault(strip_accents(e.student.full_name).strip(), []) \
                .append(e.student)
 
-    created, updated = 0, 0
+    created, updated, bad_links = 0, 0, 0
     for row in rows[header_idx + 1:]:
         cells = list(row)
         full_name = _cell_text(cells, name_col)
@@ -684,7 +736,16 @@ def import_students(class_id):
             created += 1
 
         for idx, attr in field_cols.items():
-            setattr(student, attr, _cell_text(cells, idx))
+            value = _cell_text(cells, idx)
+            if attr == "github_url":
+                # Un lien hors http(s) n'est pas importé : le lien déjà connu
+                # est conservé, et le bilan de l'import le signale.
+                try:
+                    value = clean_url(value)
+                except ValueError:
+                    bad_links += 1
+                    continue
+            setattr(student, attr, value)
 
         # Statut : seules les deux valeurs de l'export sont reconnues ; toute
         # autre (ou une cellule vide) laisse l'étudiant dans son état actuel.
@@ -697,6 +758,9 @@ def import_students(class_id):
     db.session.commit()
     flash(f"Import terminé : {created} étudiant(s) ajouté(s), {updated} mis à "
           f"jour. Aucun étudiant supprimé.", "success")
+    if bad_links:
+        flash(f"{bad_links} lien(s) GitHub ignoré(s) : un lien doit commencer "
+              "par http:// ou https://.", "error")
     return redirect(url_for("main.view_class", class_id=class_id))
 
 

@@ -21,7 +21,7 @@ from .models import (
     SUBJECT_STUDENT, SUBJECT_GROUP, WORK_MODE_INDIVIDUAL, WORK_MODE_GROUP,
 )
 from . import grading
-from .main import get_class_or_403, purge_subject_data
+from .main import get_class_or_403, purge_subject_data, clean_url, URL_ERROR
 
 modules_bp = Blueprint("modules", __name__)
 
@@ -212,10 +212,16 @@ def create_module(class_id):
         flash("Le nom du module est requis.", "error")
         return redirect(url_for("main.view_class", class_id=class_id))
 
+    try:
+        discord_url = clean_url(request.form.get("discord_url"))
+        discord_ref_url = clean_url(request.form.get("discord_ref_url"))
+    except ValueError:
+        flash(URL_ERROR, "error")
+        return redirect(url_for("main.view_class", class_id=class_id))
+
     module = Module(
         name=name, class_id=klass.id, work_mode=work_mode,
-        discord_url=request.form.get("discord_url", "").strip() or None,
-        discord_ref_url=request.form.get("discord_ref_url", "").strip() or None,
+        discord_url=discord_url, discord_ref_url=discord_ref_url,
     )
     db.session.add(module)
     db.session.commit()
@@ -237,9 +243,16 @@ def edit_module(module_id):
         flash("Le nom du module est requis.", "error")
         return redirect(url_for("modules.view_module", module_id=module.id))
 
+    try:
+        discord_url = clean_url(request.form.get("discord_url"))
+        discord_ref_url = clean_url(request.form.get("discord_ref_url"))
+    except ValueError:
+        flash(URL_ERROR, "error")
+        return redirect(url_for("modules.view_module", module_id=module.id))
+
     module.name = name
-    module.discord_url = request.form.get("discord_url", "").strip() or None
-    module.discord_ref_url = request.form.get("discord_ref_url", "").strip() or None
+    module.discord_url = discord_url
+    module.discord_ref_url = discord_ref_url
     db.session.commit()
     flash("Module mis à jour.", "success")
     return redirect(url_for("modules.view_module", module_id=module.id))
@@ -448,11 +461,10 @@ def module_ranking(module_id):
 PRESENCE_UNSET = "Non renseigné"
 
 
-def synthesis_dates(module, raw_ids):
-    """Séances retenues pour la synthèse, dans l'ordre chronologique.
+def picked_dates(module, raw_ids):
+    """Séances du module désignées par `raw_ids`, dans l'ordre chronologique.
 
-    Les identifiants étrangers au module sont ignorés. Sans sélection valable,
-    on retient la séance datée la plus récente (à défaut, la dernière créée).
+    Les identifiants illisibles ou étrangers au module sont ignorés.
     """
     wanted = set()
     for raw in raw_ids:
@@ -460,8 +472,17 @@ def synthesis_dates(module, raw_ids):
             wanted.add(int(raw))
         except (TypeError, ValueError):
             continue
+    return [gd for gd in module_dates_sorted(module) if gd.id in wanted]
+
+
+def synthesis_dates(module, raw_ids):
+    """Séances retenues pour la synthèse, dans l'ordre chronologique.
+
+    Les identifiants étrangers au module sont ignorés. Sans sélection valable,
+    on retient la séance datée la plus récente (à défaut, la dernière créée).
+    """
     ordered = module_dates_sorted(module)
-    chosen = [gd for gd in ordered if gd.id in wanted]
+    chosen = picked_dates(module, raw_ids)
     if chosen:
         return chosen
     latest = next((gd for gd in module_dates_sorted(module, recent_first=True)
@@ -633,6 +654,232 @@ def export_synthesis(module_id):
         filename += "_" + last.date.strftime("%Y-%m-%d")
     return send_file(
         bio, as_attachment=True, download_name=f"synthese_{filename}.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Export Excel de la grille telle qu'elle est affichée
+# --------------------------------------------------------------------------- #
+def _date_title(gd):
+    """Intitulé d'une séance, comme dans l'en-tête de la grille."""
+    title = gd.date.strftime("%d/%m/%Y") if gd.date else "Sans date"
+    return title + (f" · {gd.label}" if gd.label else "")
+
+
+def _file_slug(text, default):
+    return re.sub(r"[^\w\-]+", "_", text or "").strip("_") or default
+
+
+def grid_export_filename(module, grade_dates):
+    """« <date de la séance>_<école>_<module>.xlsx ».
+
+    Plusieurs séances : la première et la dernière date, « 2025-09-30_au_
+    2025-10-14 ». Aucune séance datée : pas de date du tout plutôt qu'une date
+    inventée.
+    """
+    days = sorted({gd.date for gd in grade_dates if gd.date})
+    parts = []
+    if days:
+        stamp = days[0].strftime("%Y-%m-%d")
+        if len(days) > 1:
+            stamp += "_au_" + days[-1].strftime("%Y-%m-%d")
+        parts.append(stamp)
+    parts.append(_file_slug(module.klass.school.name, "ecole"))
+    parts.append(_file_slug(module.name, "module"))
+    return "_".join(parts) + ".xlsx"
+
+
+@modules_bp.route("/modules/<int:module_id>/grid.xlsx")
+@login_required
+def export_grid(module_id):
+    """Exporte en .xlsx la zone de notation telle qu'elle est à l'écran.
+
+    `dates` porte les séances sélectionnées dans le bandeau ; sans sélection,
+    toutes les séances sont exportées. Les groupes sont toujours exportés
+    dépliés, quel que soit leur état à l'écran : colonne A le groupe, colonne B
+    l'étudiant (la ligne du groupe lui-même laisse B vide). Un module
+    individuel n'a que la colonne « Étudiant ». Chaque séance coiffe ses
+    colonnes d'une cellule fusionnée, comme l'en-tête de la grille.
+
+    Comme à l'écran, les étudiants neutralisés n'y figurent pas, et le total
+    d'étoiles et la note /20 portent sur **tout** le module, même quand seules
+    quelques séances sont exportées.
+    """
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    module = get_module_or_403(module_id)
+    klass = module.klass
+    grade_dates = (picked_dates(module, request.args.getlist("dates"))
+                   or module_dates_sorted(module))
+
+    # Lignes : chaque unité notée, suivie de ses membres actifs.
+    rows = _export_rows(module)
+    subject_ids = [r["id"] for r in rows if not r["is_member"]]
+    grades = grading.compute_module_grades(module, subject_ids, set(subject_ids))
+    member_totals = grading.compute_member_totals(
+        module, [r["id"] for r in rows if r["is_member"]])
+    group_names = {g.id: g.name for g in module.groups}
+
+    # Colonnes de chaque séance, dans l'ordre de la grille.
+    kinds = (("presence", "presence_columns", PresenceValue,
+              PresenceValue.presence_column_id, "status"),
+             ("star", "star_columns", Star, Star.star_column_id, "value"),
+             ("url", "url_columns", UrlValue, UrlValue.url_column_id, "url"),
+             ("text", "text_columns", TextValue, TextValue.text_column_id, "content"))
+    values = {}
+    for kind, rel, model, fk, attr in kinds:
+        col_ids = [c.id for gd in grade_dates for c in getattr(gd, rel)]
+        if col_ids:
+            for v in model.query.filter(fk.in_(col_ids)).all():
+                values[(kind, v.subject_type, v.subject_id,
+                        getattr(v, fk.key))] = getattr(v, attr)
+    note_cols = module.note_columns
+    if note_cols:
+        for n in NoteValue.query.filter(
+                NoteValue.note_column_id.in_([c.id for c in note_cols])).all():
+            values[("note", n.subject_type, n.subject_id, n.note_column_id)] = n.score
+    color_map = {
+        (c.subject_type, c.subject_id): c.color
+        for c in SubjectColor.query.filter_by(module_id=module.id).all()
+    }
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = _safe_sheet_title(module.name)
+
+    bold = Font(bold=True)
+    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    wrap = Alignment(vertical="top", wrap_text=True)
+    head_fill = PatternFill("solid", fgColor="F1F5F9")
+    date_fill = PatternFill("solid", fgColor="E0E7FF")
+    yellow = PatternFill("solid", fgColor="FEF9C3")
+    status_fills = {
+        "red": PatternFill("solid", fgColor="FEE2E2"),
+        "orange": PatternFill("solid", fgColor="FFEDD5"),
+        "grey": PatternFill("solid", fgColor="F1F5F9"),
+    }
+    subject_fills = {
+        "green": PatternFill("solid", fgColor="DCFCE7"),
+        "yellow": PatternFill("solid", fgColor="FEF9C3"),
+        "red": PatternFill("solid", fgColor="FEE2E2"),
+        "grey": PatternFill("solid", fgColor="E2E8F0"),
+    }
+
+    ws["A1"] = (f"{module.name} — {klass.name} · {klass.school.name} · "
+                f"{klass.academic_year.label}")
+    ws["A1"].font = Font(bold=True, size=13)
+    TOP, SUB, FIRST = 2, 3, 4   # séances, intitulés de colonnes, 1re ligne
+
+    def head(row, col, title, fill=head_fill, tall=False):
+        """En-tête ; `tall` l'étend sur les deux lignes (colonne hors séance)."""
+        cell = ws.cell(row=row, column=col, value=title)
+        cell.font, cell.fill, cell.alignment = bold, fill, center
+        if tall:
+            ws.cell(row=SUB, column=col).fill = fill
+            ws.merge_cells(start_row=TOP, start_column=col, end_row=SUB, end_column=col)
+
+    label_heads = ["Groupe", "Étudiant"] if module.is_group_mode else ["Étudiant"]
+    for j, title in enumerate(label_heads, start=1):
+        head(TOP, j, title, tall=True)
+        ws.column_dimensions[get_column_letter(j)].width = 26
+
+    # Colonnes de séance : (colonne Excel, nature, colonne de la grille).
+    grid_cols = []
+    col = len(label_heads) + 1
+    for gd in grade_dates:
+        start = col
+        for kind, rel, *_ in kinds:
+            for c in getattr(gd, rel):
+                head(SUB, col, c.title)
+                ws.column_dimensions[get_column_letter(col)].width = (
+                    36 if kind in ("url", "text") else 14)
+                grid_cols.append((col, kind, c))
+                col += 1
+        if col == start:   # séance sans colonne : une colonne vide, comme à l'écran
+            head(SUB, col, "—")
+            col += 1
+        title = _date_title(gd)
+        if gd.duration_hours:
+            hours = f"{gd.duration_hours:.2f}".rstrip("0").rstrip(".").replace(".", ",")
+            title += f" · {hours} h"
+        head(TOP, start, title, fill=date_fill)
+        for j in range(start + 1, col):
+            ws.cell(row=TOP, column=j).fill = date_fill
+        if col - start > 1:
+            ws.merge_cells(start_row=TOP, start_column=start,
+                           end_row=TOP, end_column=col - 1)
+
+    total_col, note20_col = col, col + 1
+    head(TOP, total_col, "Total ★", tall=True)
+    head(TOP, note20_col, "Note /20", tall=True)
+    first_note = note20_col + 1
+    for j, nc in enumerate(note_cols, start=first_note):
+        head(TOP, j, nc.title, fill=yellow, tall=True)
+        ws.column_dimensions[get_column_letter(j)].width = 14
+    comment_col = first_note + len(note_cols)
+    head(TOP, comment_col, "Commentaire", tall=True)
+    ws.column_dimensions[get_column_letter(comment_col)].width = 44
+
+    for r, row in enumerate(rows, start=FIRST):
+        stype, sid = row["type"], row["id"]
+        if module.is_group_mode:
+            group_id = row["group_id"] if row["is_member"] else sid
+            labels = [group_names.get(group_id, ""),
+                      row["label"] if row["is_member"] else None]
+        else:
+            labels = [row["label"]]
+        fill = subject_fills.get(color_map.get((stype, sid)))
+        for j, label in enumerate(labels, start=1):
+            cell = ws.cell(row=r, column=j, value=label)
+            if not row["is_member"]:
+                cell.font = bold
+            if fill:
+                cell.fill = fill
+
+        for j, kind, c in grid_cols:
+            value = values.get((kind, stype, sid, c.id))
+            cell = ws.cell(row=r, column=j)
+            status_fill = None
+            if kind == "star":
+                # Comme à l'écran : une cellule jamais saisie vaut 0 étoile.
+                value = "0" if value is None else str(value).strip()
+                cell.value = grading.display_token(value) or "—"
+                cell.alignment = center
+                status_fill = status_fills.get(grading.status_color(value))
+            elif kind == "presence":
+                # La présence est celle d'un étudiant : vide sur un groupe.
+                cell.value = value if stype == SUBJECT_STUDENT else None
+                cell.alignment = center
+                status_fill = status_fills.get(grading.PRESENCE_STATUSES.get(value))
+            else:
+                cell.value = value
+                cell.alignment = wrap
+            if status_fill:
+                cell.fill = status_fill
+
+        if row["is_member"]:
+            total, note = member_totals.get(sid, 0), "—"
+        else:
+            g = grades.get(sid, {"total": 0, "note": None})
+            total, note = g["total"], ("N/A" if g["note"] is None else g["note"])
+        ws.cell(row=r, column=total_col, value=total).alignment = center
+        ws.cell(row=r, column=note20_col, value=note).alignment = center
+        for j, nc in enumerate(note_cols, start=first_note):
+            cell = ws.cell(row=r, column=j, value=values.get(("note", stype, sid, nc.id)))
+            cell.fill, cell.alignment = yellow, center
+        ws.cell(row=r, column=comment_col, value=row.get("comment")).alignment = wrap
+
+    ws.freeze_panes = ws.cell(row=FIRST, column=len(label_heads) + 1)
+
+    bio = BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+    return send_file(
+        bio, as_attachment=True,
+        download_name=grid_export_filename(module, grade_dates),
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
@@ -1221,7 +1468,10 @@ def save_url(module_id):
     module = get_module_or_403(module_id)
     data = request.get_json(silent=True) or {}
     column_id = data.get("column_id")
-    url = str(data.get("value", "")).strip() or None
+    try:
+        url = clean_url(str(data.get("value") or ""))
+    except ValueError:
+        return jsonify(error=URL_ERROR), 400
 
     col = db.session.get(UrlColumn, column_id)
     if not col or col.grade_date.module_id != module.id:
