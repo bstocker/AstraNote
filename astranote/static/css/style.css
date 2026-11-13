@@ -77,6 +77,27 @@ h2 { font-size: 17px; margin: 24px 0 10px; }
 .badge.neutral { background: #f1f5f9; color: #64748b; }
 .badge.sent { background: #dcfce7; color: #166534; }
 
+/* Tableau de bord : écoles repliables. Le bandeau (summary) reste collé en
+   haut de l'écran tant qu'on fait défiler une école dépliée, pour savoir
+   toujours dans quelle école on se trouve. */
+.school-toggle-all { display: flex; justify-content: flex-end; gap: 6px; margin: -6px 0 8px; font-size: 13px; }
+.btn-link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; font: inherit; }
+.btn-link:hover { text-decoration: underline; }
+.school-panel { padding-top: 0; }
+.school-panel > summary {
+  list-style: none; cursor: pointer; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  position: sticky; top: 0; z-index: 2; background: var(--panel);
+  padding: 14px 0; border-radius: 10px;
+}
+.school-panel > summary::-webkit-details-marker { display: none; }
+.school-panel > summary::before {
+  content: "▸"; color: var(--muted); display: inline-block; width: 12px; transition: transform .15s;
+}
+.school-panel[open] > summary::before { transform: rotate(90deg); }
+.school-panel > summary h2 { margin: 0; display: inline; }
+.school-panel > summary .school-summary { font-size: 13px; }
+.school-panel:not([open]) { padding-bottom: 0; }
+
 /* Barre d'avancement de saisie (tableau de bord) */
 .progress { height: 7px; background: #e2e8f0; border-radius: 999px; margin: 10px 0 4px; overflow: hidden; }
 .progress-bar { height: 100%; background: var(--accent); border-radius: 999px; }

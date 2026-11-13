@@ -301,6 +301,30 @@ def test_dashboard_shows_notes_sent(app, admin):
     assert "check-sent" in html and "✔" in html
 
 
+def test_dashboard_school_collapsible(app, admin):
+    # Chaque école est un <details> déplié par défaut, dont le bandeau
+    # résume classes, modules et notes envoyées (lisible une fois replié).
+    _, mid, _, _ = bootstrap_class(app, admin)
+    html = admin.get("/").get_data(as_text=True)
+    assert 'class="panel school-panel"' in html and " open>" in html
+    assert "1 classe(s) · 1 module(s) · notes envoyées 0/1" in html
+    assert "js/dashboard.js" in html
+    assert "Tout replier" not in html          # inutile avec une seule école
+    admin.post(f"/modules/{mid}/notes-sent", data={"notes_sent": "on"})
+    assert "notes envoyées 1/1" in admin.get("/").get_data(as_text=True)
+    # Seconde école : les boutons « tout » apparaissent.
+    admin.post("/schools", data={"name": "Autre"})
+    with app.app_context():
+        k = Class.query.first()
+        sid = School.query.filter_by(name="Autre").first().id
+        yid = k.academic_year_id
+    admin.post("/classes/new", data={"name": "B1", "school_id": sid,
+                                     "academic_year_id": yid, "teacher_id": 1})
+    html = admin.get(f"/?year={yid}").get_data(as_text=True)
+    assert html.count('class="panel school-panel"') == 2
+    assert "Tout replier" in html and "Tout déplier" in html
+
+
 def test_notes_sent_defaults_to_today(app, admin):
     from datetime import date
     _, mid, _, _ = bootstrap_class(app, admin)

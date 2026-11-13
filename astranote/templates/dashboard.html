@@ -38,13 +38,33 @@
       Aucune classe pour cette année. <a href="{{ url_for('main.create_class') }}">Créer une classe</a>.
     </div>
   {% else %}
+    {#- Chaque école se replie sur son bandeau : avec beaucoup d'écoles, on
+        les voit toutes d'un coup d'œil et on n'ouvre que celle qui sert.
+        <details> marche sans JavaScript ; dashboard.js ne fait que retenir
+        l'état de chaque école (dans le navigateur) et gérer « tout ». -#}
+    {% if groups|length > 1 %}
+    <div class="school-toggle-all">
+      <button type="button" class="btn-link" data-toggle-all="close">Tout replier</button>
+      <span class="muted">·</span>
+      <button type="button" class="btn-link" data-toggle-all="open">Tout déplier</button>
+    </div>
+    {% endif %}
     {% for school, classes in groups %}
-    <div class="panel">
-      <h2 style="margin-top:0;">
-        {{ school.name }}
-        {% if school.teacher_id is none %}<span class="badge" title="École commune">commune</span>{% endif %}
-        <span class="muted" style="font-weight:400; font-size:13px;">· {{ classes|length }} classe(s)</span>
-      </h2>
+    {% set modules = classes|map(attribute='modules')|sum(start=[]) %}
+    {% set sent = modules|selectattr('notes_sent')|list|length %}
+    <details class="panel school-panel" data-school-id="{{ school.id }}" open>
+      <summary>
+        <h2>
+          {{ school.name }}
+          {% if school.teacher_id is none %}<span class="badge" title="École commune">commune</span>{% endif %}
+        </h2>
+        {#- Résumé lisible bandeau replié : le nombre de notes envoyées dit
+            d'emblée s'il reste du travail dans l'école. -#}
+        <span class="school-summary muted">
+          {{ classes|length }} classe(s) · {{ modules|length }} module(s)
+          {%- if modules %} · notes envoyées {{ sent }}/{{ modules|length }}{% endif %}
+        </span>
+      </summary>
       <div class="grid-cards">
         {% for c in classes %}
         <div class="card">
@@ -75,8 +95,11 @@
         </div>
         {% endfor %}
       </div>
-    </div>
+    </details>
     {% endfor %}
   {% endif %}
 {% endif %}
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
 {% endblock %}

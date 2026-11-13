@@ -83,7 +83,10 @@ finales restent saisies à la main par l'enseignant.
 ### Suivi et pilotage
 
 - **Tableau de bord** : sélecteur d'année, classes regroupées par école, avancement
-  de saisie de chaque classe.
+  de saisie de chaque classe. Chaque école se replie sur son bandeau (nombre de
+  classes, de modules et de notes envoyées), qui reste visible en haut de l'écran
+  pendant le défilement ; « Tout replier / Tout déplier », état retenu par le
+  navigateur.
 - **Dashboard de classement** par module : podium général et podium par séance.
 - **Suivi de la transmission des notes** à l'établissement (envoyé ou non, date,
   moyen, précision libre), remonté sur le tableau de bord.
